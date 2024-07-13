@@ -9,7 +9,7 @@ def send_message(chat_id, text):
     url = URL + 'sendMessage'
     params = {
         'chat_id': chat_id,
-        'text': text
+        'text': text + "-> /start"
     }
     response = requests.post(url, params=params)
     if response.status_code == 200:

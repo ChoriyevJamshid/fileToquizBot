@@ -147,10 +147,18 @@ class QuizPart(BaseModel):
     link = models.CharField(max_length=255, blank=True, null=True, unique=True)
     from_number = models.IntegerField(blank=True, null=True)
     to_number = models.IntegerField(blank=True, null=True)
-
+    quantity = models.IntegerField(blank=True, null=True)
     data = models.JSONField(blank=True, null=True)
 
     objects = models.Manager()
+
+    def save(self, *args, **kwargs):
+        if not self.quantity:
+            self.quantity = self.to_number - self.from_number + 1
+
+        if not self.data:
+            self.data = dict()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"QuizPart(pk={self.pk}, link={self.link})"
@@ -161,7 +169,10 @@ class UserQuizPart(BaseModel):
     quiz_part = models.ForeignKey(QuizPart, on_delete=models.CASCADE, related_name='users')
     total_answers = models.IntegerField(default=0, blank=True, null=True)
     correct_answers = models.IntegerField(default=0, blank=True, null=True)
+    skipped_answers = models.IntegerField(default=0, blank=True, null=True)
+    failed_answers = models.IntegerField(default=0, blank=True, null=True)
     spend_time = models.IntegerField(default=0, blank=True, null=True)
+    is_active = models.BooleanField(default=True)
 
     data = models.JSONField(blank=True, null=True)
 
@@ -176,12 +187,59 @@ class UserQuizPart(BaseModel):
         return f'UserQuiz(pk={self.pk})'
 
 
+class GroupQuizPart(BaseModel):
+    quiz_part = models.ForeignKey(QuizPart, on_delete=models.SET_NULL, blank=True, null=True,
+                                  related_name="groups")
+    data_model = models.ForeignKey("Data", on_delete=models.SET_NULL, blank=True, null=True,
+                                   related_name="groups")
+
+    language = models.CharField(max_length=255, blank=True, null=True)
+    group_id = models.IntegerField(blank=True, null=True)
+    message_id = models.IntegerField(blank=True, null=True)
+    index = models.IntegerField(default=0)
+
+    data = models.JSONField(blank=True, null=True)
+    is_active = models.BooleanField(default=False)
+    is_finish = models.BooleanField(default=False)
+
+    objects = models.Manager()
+
+    def save(self, *args, **kwargs):
+        if not self.data:
+            self.data = dict()
+            self.data['users'] = dict()
+            self.data['users_number'] = 0
+
+        if not self.data_model:
+            self.data_model = Data.get_solo()
+
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"GroupQuizPart(pk = {self.pk}) group_id={self.group_id}"
+
+
 class Data(SingletonModel):
     data = models.JSONField(blank=True, null=True)
 
     def save(self, *args, **kwargs):
         if not self.data:
             self.data = {}
+            self.data['instruction'] = dict()
+            self.data['instruction']['photo'] = dict()
+            self.data['instruction']['video'] = dict()
+            self.data['instruction']['photo']['word'] = ""
+            self.data['instruction']['photo']['excel'] = ""
+            self.data['instruction']['photo']['txt'] = ""
+            self.data['instruction']['photo']['csv'] = ""
+            self.data['instruction']['video']['word'] = ""
+            self.data['instruction']['video']['excel'] = ""
+            self.data['instruction']['video']['txt'] = ""
+            self.data['instruction']['video']['csv'] = ""
+
+            self.data['groups'] = dict()
+        if not self.data.get('groups', None):
+            self.data['groups'] = dict()
         super().save(*args, **kwargs)
 
     def __str__(self):

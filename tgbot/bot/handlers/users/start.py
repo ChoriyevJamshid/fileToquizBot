@@ -1,26 +1,47 @@
-import random
-
 from django.conf import settings
-from aiogram.enums import ContentType
 from aiogram.fsm.context import FSMContext
-from asgiref.sync import sync_to_async
 from aiogram import Bot, types, Router, F
-from aiogram.filters import CommandStart, Command
+from aiogram.filters import CommandStart
 
-from tgbot.bot.handlers.utils import generate_random_string
-from tgbot.bot.keyboards import inline, reply
-from tgbot.bot.states.main import NewQuizState, InstructionState
+from tgbot.bot.keyboards import inline
+from tgbot.bot.states.main import NewQuizState
 from tgbot.bot.utils import check_subscription, get_channels, get_user, get_texts, get_languages
-from tgbot.models import Quiz, QuizPart
+from tgbot.models import Quiz, QuizPart, TelegramProfile
 
-from tgbot.bot.filters.filter import ChatTypeFilter
+from tgbot.bot.filters import filter
 
 dp_user = Router()
-dp_user.message.filter(ChatTypeFilter(["private"]))
+dp_user.message.filter(filter.ChatTypeFilter(["private"]))
+dp_user.message.filter(filter.UserActiveQuizFilter())
+dp_user.poll_answer.filter(filter.PollAnswerFilter())
+
+
+async def send_quiz(message: types.Message, user: TelegramProfile, texts: dict, link: str | None = None) -> None:
+    function = message.edit_text
+    if not link:
+        link = message.text.split(" ")[-1]
+        function = message.answer
+
+    quiz_part = QuizPart.objects.filter(link=link)
+    if quiz_part.exists():
+        quiz: QuizPart = quiz_part.first()
+        ques_text = texts['questions'][user.language]
+        timer_text = texts['seconds'][user.language]
+        message_to_user = f"""
+    [{quiz.from_number} - {quiz.to_number}] {quiz.quiz.title}
+🖋 {quiz.to_number - quiz.from_number + 1} {ques_text} | ⏱ {quiz.quiz.timer}-{timer_text}
+
+{str(texts['stop_text'][user.language])}
+    """
+        await function(
+            message_to_user,
+            reply_markup=await inline.quiz_markup(texts, user.language, link)
+        )
 
 
 @dp_user.message(CommandStart())
 async def start(message: types.Message, bot: Bot, state: FSMContext):
+    await state.clear()
     data = await state.get_data()
 
     chat_id = message.chat.id
@@ -29,10 +50,13 @@ async def start(message: types.Message, bot: Bot, state: FSMContext):
                           message.from_user.last_name,
                           message.from_user.username)
     lang = user.language
+    text_data = message.text.split(" ")
+
     if lang is None:
         message_to_user = "🌐 Til tanlash uchun quidagil tugmalardan foydalaning. 👇"
         languages = await get_languages(state)
-        await message.answer(message_to_user, reply_markup=await inline.languages_markup(languages))
+        link = text_data[-1] if len(text_data) == 2 else ""
+        await message.answer(message_to_user, reply_markup=await inline.languages_markup(languages, link))
     else:
         channels = data.get("channels")
         texts = await get_texts(state)
@@ -47,12 +71,15 @@ async def start(message: types.Message, bot: Bot, state: FSMContext):
                 message_to_user,
                 reply_markup=await inline.channels_markup(
                     channels,
-                    text=f"✅ {texts['check_subscribe'][user.language]}"
+                    text=f"✅ {texts['check_subscribe'][user.language]}",
                 ))
         else:
-            message_to_user = f"🤖 {texts['menu'][user.language]} ⬇️"
-            buttons = texts['main_menu_buttons'][user.language]
-            await message.answer(message_to_user, reply_markup=await inline.main_menu_markup(buttons))
+            if len(text_data) > 1:
+                await send_quiz(message, user, texts)
+            else:
+                message_to_user = f"🤖 {texts['menu'][user.language]} ⬇️"
+                buttons = texts['main_menu_buttons'][user.language]
+                await message.answer(message_to_user, reply_markup=await inline.main_menu_markup(buttons))
 
 
 @dp_user.callback_query(F.data.startswith("lang"))
@@ -60,7 +87,7 @@ async def change_language(call: types.CallbackQuery, bot: Bot, state: FSMContext
     chat_id = call.message.chat.id
     data = await state.get_data()
 
-    code = call.data.split("_")[-1]
+    _, code, link = call.data.split("_")
 
     user = await get_user(state, chat_id)
     user.language = code
@@ -78,9 +105,12 @@ async def change_language(call: types.CallbackQuery, bot: Bot, state: FSMContext
                                   ))
         await state.update_data({"channels": channels})
     else:
-        message_to_user = f"🤖 {texts['menu'][user.language]} ⬇️"
-        buttons = texts['main_menu_buttons'][user.language]
-        await call.message.edit_text(message_to_user, reply_markup=await inline.main_menu_markup(buttons))
+        if not link:
+            message_to_user = f"🤖 {texts['menu'][user.language]} ⬇️"
+            buttons = texts['main_menu_buttons'][user.language]
+            await call.message.edit_text(message_to_user, reply_markup=await inline.main_menu_markup(buttons))
+        else:
+            await send_quiz(call.message, user, texts, link)
     await call.answer()
 
 
@@ -120,7 +150,8 @@ async def process_menu(call: types.CallbackQuery, bot: Bot, state: FSMContext):
     if call.data.split("_")[-1] == "2":
         if user.is_verified:
             message_to_user = texts['test_title'][user.language]
-            await call.message.answer(message_to_user, reply_markup=None)
+            await call.message.answer(message_to_user, reply_markup=await inline.generate_markup(
+                {"🔙": "back"}))
             await state.set_state(NewQuizState.title)
         else:
             message_to_user = texts['no_verified'][user.language]
@@ -192,4 +223,3 @@ async def process_pagination(call: types.CallbackQuery, bot: Bot, state: FSMCont
         await call.message.edit_text(
             message_to_user,
             reply_markup=await inline.pagination_markup(total_page, current_page))
-

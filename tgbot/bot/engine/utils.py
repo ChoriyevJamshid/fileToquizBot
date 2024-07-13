@@ -1,45 +1,20 @@
-# import pandas as pd
-#
-#
-# def get_excel_content(file_path, _format):
-#     result = []
-#     engine = "xlrd" if _format == "xls" else "openpyxl"
-#     df = pd.read_excel(file_path, engine=engine)
-#     for value in df.values:
-#         result.append(value[0])
-#     return result
-#
-#
-# result = get_excel_content("Педагогика. Психология 2022.xls", "xls")
-# print(result)
+import csv
+import pandas as pd
+import PyPDF2
 
 
-import string
+async def get_csv_content(file_path):
+    result = []
+    try:
+        with open(file_path, mode="r") as csv_file:
+            data = data = [row for row in csv.reader(csv_file, delimiter=",")]
 
-# import string
-# import random
+        for row in data:
+            if len(row) == 1 and row[0] != '':
+                result.append(row[0])
+    except Exception:
+        pass
 
-
-# name = str()
-# tpl = 'upper', 'lower'
-# for i in range(6):
-#     stm = random.choice(tpl)
-#     if stm == 'upper':
-#         name += random.choice(string.ascii_uppercase)
-#     else:
-#         name += random.choice(string.ascii_lowercase)
-# return name
-
-# def generate_random_string():
-#     tpl = 'upper', 'lower'
-#     result = ""
-#     for i in range(6):
-#         stm = random.choice(tpl)
-#         if stm == 'upper':
-#             result += random.choice(string.ascii_uppercase)
-#         else:
-#             result += random.choice(string.ascii_lowercase)
-
-
+    return result
 
 

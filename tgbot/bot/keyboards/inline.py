@@ -1,4 +1,4 @@
-from aiogram.types import SwitchInlineQueryChosenChat
+from aiogram.types import SwitchInlineQueryChosenChat, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder, InlineKeyboardButton, KeyboardBuilder
 
 from tgbot.bot.utils import get_texts
@@ -26,11 +26,11 @@ async def channels_markup(channels, text=None):
     return markup.as_markup()
 
 
-async def languages_markup(languages):
+async def languages_markup(languages, link=""):
     markup = InlineKeyboardBuilder()
     for language in languages:
         markup.add(InlineKeyboardButton(
-            text=f"{language.title}", callback_data=f"lang_{language.code}"
+            text=f"{language.title}", callback_data=f"lang_{language.code}_{link}"
         ))
     return markup.adjust(*(1,)).as_markup()
 
@@ -110,22 +110,6 @@ async def pagination_markup(total_page, current_page):
     return keyboard.adjust(*(3,)).as_markup()
 
 
-# async def test_markup(test_id, part, test_uuid, user, state):
-#     texts = await get_texts(state)
-#     builder = InlineKeyboardBuilder()
-#     start_btn = InlineKeyboardButton(
-#         text=texts['start'][user.language],
-#         callback_data=f"testing_{test_uuid}_{test_id}"
-#     )
-#     share_btn = InlineKeyboardButton(
-#         text=texts['share'][user.language],
-#         # switch_inline_query=f"share_{test_uuid}_{test_id}"
-#         switch_inline_query=f"quiz-{test_id}-{part}-{test_uuid}"
-#     )
-#     builder.add(start_btn, share_btn)
-#     return builder.adjust(*(2,)).as_markup()
-
-
 async def instruction_markup(buttons, sizes=(1,)):
     items = {f"📝 {buttons[1]}": buttons[1],
              f"🎬 {buttons[2]}": buttons[2],
@@ -142,14 +126,41 @@ async def instruction_markup(buttons, sizes=(1,)):
     return keyboard.as_markup()
 
 
-async def quiz_markup(texts, language, link):
+async def quiz_markup(texts, language, link, is_inline_query=False):
     start = texts['start'][language]
+    start_in_group = texts['start_in_group'][language]
+    share = texts['share'][language]
+    keyboard = InlineKeyboardBuilder()
+
+    start_btn = InlineKeyboardButton(
+        text=start, callback_data=f"quiz__{link}"
+    )
+
+    if is_inline_query:
+        start_btn = InlineKeyboardButton(
+            text=start, url=f"https://t.me/FileToQuiz_bot?start={link}"
+        )
+    keyboard.add(
+        start_btn,
+        InlineKeyboardButton(
+            text=start_in_group, url=f"https://t.me/FileToQuiz_bot?startgroup={link}"
+        ),
+        InlineKeyboardButton(
+            text=share, switch_inline_query=f"share_{link}"
+        )
+    )
+
+    return keyboard.adjust(*(1,)).as_markup()
+
+
+async def quiz_retry_markup(texts, language, link):
+    retry = texts['retry'][language]
     start_in_group = texts['start_in_group'][language]
     share = texts['share'][language]
     keyboard = InlineKeyboardBuilder()
     keyboard.add(
         InlineKeyboardButton(
-            text=start, callback_data=f"quiz__{link}"
+            text=retry, callback_data=f"quiz_retry__{link}"
         ),
         InlineKeyboardButton(
             text=start_in_group, url=f"https://t.me/FileToQuiz_bot?startgroup={link}"
@@ -162,7 +173,18 @@ async def quiz_markup(texts, language, link):
     return keyboard.adjust(*(1,)).as_markup()
 
 
-async def generate_markup(buttons, sizes=(1,)):
+async def share_markup(texts, language, link):
+    share = texts['share'][language]
+    keyboard = InlineKeyboardBuilder()
+    keyboard.add(
+        InlineKeyboardButton(
+            text=share, switch_inline_query=f"share_{link}"
+        )
+    )
+    return keyboard.as_markup()
+
+
+async def generate_markup(buttons: dict, sizes=(1,)) -> InlineKeyboardMarkup:
     keyboard = InlineKeyboardBuilder()
     for key, value in buttons.items():
         keyboard.add(
@@ -172,4 +194,3 @@ async def generate_markup(buttons, sizes=(1,)):
             )
         )
     return keyboard.adjust(*sizes).as_markup()
-

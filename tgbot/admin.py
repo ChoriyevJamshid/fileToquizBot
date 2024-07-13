@@ -26,12 +26,24 @@ class TelegramProfileAdmin(admin.ModelAdmin):
 class QuizAdmin(admin.ModelAdmin):
     list_display = ('id', 'title', 'timer', 'quantity', 'link', 'created_at', 'updated_at')
     list_display_links = ('id', 'title')
+    list_editable = ("timer",)
     inlines = [QuizPartInline, ]
 
 
 @admin.register(models.UserQuizPart)
 class UserQuizPartAdmin(admin.ModelAdmin):
     list_display = ('id', 'user', 'quiz_part', 'total_answers', 'correct_answers')
+
+
+@admin.register(models.GroupQuizPart)
+class GroupQuizPartAdmin(admin.ModelAdmin):
+    list_display = ('id', 'quiz_part', 'group_id', 'message_id', 'is_active', 'is_finish')
+    list_display_links = ('id', 'quiz_part', 'group_id')
+
+
+@admin.register(models.QuizPart)
+class QuizPartAdmin(admin.ModelAdmin):
+    pass
 
 
 # @admin.register(models.Question)

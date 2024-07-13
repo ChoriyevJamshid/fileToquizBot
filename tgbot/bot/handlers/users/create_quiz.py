@@ -1,15 +1,14 @@
-import asyncio
-import csv
 import os
+import random
 
-from aiogram import Bot, types
+from aiogram import Bot, types, F
 from aiogram.enums import ContentType
 from aiogram.fsm.context import FSMContext
 from django.conf import settings
 
-from tgbot.bot.keyboards import reply
+from tgbot.bot.keyboards import reply, inline
 from tgbot.bot.states.main import NewQuizState
-from tgbot.bot.engine import excel
+from tgbot.bot.engine import reader
 from tgbot.bot.utils import get_texts, get_user
 
 from tgbot.models import Quiz, QuizPart
@@ -31,11 +30,8 @@ def create_quiz_part(quiz, ques_count, quiz_part_list):
         from_number=from_number,
         to_number=ques_count,
     )
-    # print('\ncreated new quiz part\n')
-    # print(quiz_part)
-    quiz_part.data = dict()
     quiz_part.data['questions'] = quiz_part_list
-    quiz_part.save(update_fields=['data'])
+    quiz_part.save()
 
 
 async def save_data(message: types.Message, bot: Bot, state: FSMContext):
@@ -54,7 +50,8 @@ async def save_data(message: types.Message, bot: Bot, state: FSMContext):
             link=new_link,
         )
 
-    except Exception:
+    except Exception as e:
+        print(f"Exception: {e}")
         return await message.answer(
             texts['quiz_title_unique'][user.language],
             reply_markup=types.ReplyKeyboardRemove()
@@ -70,13 +67,13 @@ async def save_data(message: types.Message, bot: Bot, state: FSMContext):
             if index % 5 == 1:
                 ques_count += 1
                 question_data = dict()
-                question_data['question'] = value
+                question_data['question'] = str(value)
                 question_data['options'] = []
                 is_correct = True
             else:
-                question_data['options'].append(value)
+                question_data['options'].append(str(value))
                 if is_correct:
-                    question_data['correct_option'] = value
+                    question_data['correct_option'] = str(value)
                     is_correct = False
 
                 if index % 5 == 0:
@@ -84,36 +81,9 @@ async def save_data(message: types.Message, bot: Bot, state: FSMContext):
                     if ques_count % 25 == 0:
                         create_quiz_part(quiz, ques_count, quiz_part_list)
                         quiz_part_list = list()
-                        # while True:
-                        #     new_link = generate_random_string()
-                        #     if not QuizPart.objects.filter(link=new_link).exists():
-                        #         break
-                        #
-                        # quiz_part = QuizPart.objects.create(
-                        #     quiz_id=quiz.id,
-                        #     link=new_link,
-                        #     from_number=ques_count - 24,
-                        #     to_number=ques_count,
-                        # )
-                        # quiz_part.data = dict()
-                        # quiz_part.data['questions'] = quiz_part_list
-                        # quiz_part.save(update_fields=['data'])
 
         if 0 < len(quiz_part_list) < 25:
             create_quiz_part(quiz, ques_count, quiz_part_list)
-            # while True:
-            #     new_link = generate_random_string()
-            #     if not QuizPart.objects.filter(link=new_link).exists():
-            #         break
-            # quiz_part = QuizPart.objects.create(
-            #     quiz_id=quiz.id,
-            #     link=new_link,
-            #     from_number=ques_count - 24,
-            #     to_number=ques_count,
-            # )
-            # quiz_part.data = dict()
-            # quiz_part.data['questions'] = quiz_part_list
-            # quiz_part.save(update_fields=['data'])
 
         quiz.quantity = ques_count
         quiz.save(update_fields=['quantity'])
@@ -134,13 +104,14 @@ async def new_quiz_title(message: types.Message, state: FSMContext):
 
         if Quiz.objects.filter(title=message.text, user=user).exists():
             await message.answer(
-                texts['quiz_title_unique'][user.language]
+                texts['quiz_title_unique'][user.language],
+                reply_markup=await inline.generate_markup({"🔙": "back"})
             )
         else:
             await state.update_data(test_title=message.text)
 
             message_to_user = texts['test_file'][user.language]
-            await message.answer(message_to_user)
+            await message.answer(message_to_user, reply_markup=await inline.generate_markup({"🔙": "back"}))
             await state.set_state(NewQuizState.file)
     else:
         message_to_user = texts['write_text'][user.language]
@@ -161,43 +132,59 @@ async def new_quiz_file(message: types.Message, bot: Bot, state: FSMContext):
         new_file = f"{file.file_id}.{_format}"
         await bot.download_file(file.file_path, f"media/{new_file}")
 
-        if _format in ('xls', 'xlsx'):
+        if _format in ('xls', 'xlsx', 'docx', 'csv', 'txt'):
             try:
-                questions = await excel.get_excel_content(
-                    f"{settings.BASE_DIR}/media/{new_file}",
-                    _format=_format
-                )
-                # print(questions)
+                questions = []
+                if _format in ('xls', 'xlsx'):
+                    questions = await reader.get_excel_content(
+                        f"{settings.BASE_DIR}/media/{new_file}",
+                        _format=_format
+                    )
+                elif _format == 'docx':
+                    questions = await reader.get_docx_content(
+                        f"{settings.BASE_DIR}/media/{new_file}"
+                    )
+                elif _format == "csv":
+                    questions = await reader.get_csv_content(
+                        f"{settings.BASE_DIR}/media/{new_file}"
+                    )
+                elif _format == "txt":
+                    questions = await reader.get_txt_content(
+                        f"{settings.BASE_DIR}/media/{new_file}"
+                    )
+
                 if not questions:
                     message_to_user = texts['file_no_questions'][user.language]
                     await message.answer(message_to_user)
                 else:
-                    # print('\nOK\n')
                     os.remove(f"{settings.BASE_DIR}/media/{new_file}")
-
-                    # message_to_user = texts['test_quantity'][user.language]
-                    # await state.update_data(test_questions=questions)
-                    # await message.answer(message_to_user, reply_markup=await reply.quantity_markup())
-                    # await state.set_state(NewQuizState.quantity)
                     message_to_user = texts['test_duration'][user.language]
-                    # await state.update_data(test_quantity=quantity)
+
                     await state.update_data(test_questions=questions)
-                    await message.answer(message_to_user, reply_markup=await reply.duration_markup())
+                    await message.answer(message_to_user, reply_markup=await reply.duration_markup(
+                        texts, user.language
+                    ))
                     await state.set_state(NewQuizState.duration)
 
             except Exception as e:
                 print(e)
                 message_to_user = texts['problem_with_file'][user.language]
-                await message.answer(message_to_user)
+                await message.answer(
+                    message_to_user,
+                    reply_markup=await inline.generate_markup({"🔙": "back"})
+                )
 
         else:
             message_to_user = texts['no_file_format'][user.language]
-            await message.answer(message_to_user)
+            await message.answer(
+                message_to_user,
+                reply_markup=await inline.generate_markup({"🔙": "back"})
+            )
 
     else:
         message_answer_text = texts['no_file'][user.language]
         await bot.delete_message(message.from_user.id, message.message_id)
-        await message.answer(message_answer_text)
+        await message.answer(message_answer_text, reply_markup=await inline.generate_markup({"🔙": "back"}))
 
 
 @dp_user.message(NewQuizState.quantity)
@@ -211,63 +198,80 @@ async def new_quiz_quantity(message: types.Message, bot: Bot, state: FSMContext)
             if quantity in (20, 25, 30, 35, 40, 45, 50):
                 message_to_user = texts['test_duration'][user.language]
                 await state.update_data(test_quantity=quantity)
-                await message.answer(message_to_user, reply_markup=await reply.duration_markup())
+                await message.answer(message_to_user, reply_markup=await reply.duration_markup(
+                    texts, user.language
+                ))
                 await state.set_state(NewQuizState.duration)
 
             else:
                 message_to_user = texts['below_button'][user.language]
-                await message.answer(message_to_user, reply_markup=await reply.duration_markup())
+                await message.answer(message_to_user, reply_markup=await reply.duration_markup(
+                    texts, user.language
+                ))
         else:
             message_to_user = texts['below_button'][user.language]
-            await message.answer(message_to_user, reply_markup=await reply.duration_markup())
+            await message.answer(message_to_user, reply_markup=await reply.duration_markup(
+                texts, user.language
+            ))
     else:
         message_to_user = texts['below_button'][user.language]
-        await message.answer(message_to_user, reply_markup=await reply.duration_markup())
+        await message.answer(message_to_user, reply_markup=await reply.duration_markup(
+            texts, user.language
+        ))
 
 
 @dp_user.message(NewQuizState.duration)
 async def new_quiz_duration(message: types.Message, bot: Bot, state: FSMContext):
     texts = await get_texts(state)
     user = await get_user(state, message.from_user.id)
-    if message.text.isdigit():
-        duration = int(message.text)
+
+    if message.text == "🔙 " + texts['back'][user.language]:
+        message_to_user = texts['test_file'][user.language]
+        msg = await message.answer("Delete reply markup", reply_markup=types.ReplyKeyboardRemove())
+        await bot.delete_message(message.chat.id, msg.message_id)
+        await message.answer(message_to_user, reply_markup=await inline.generate_markup({"🔙": "back"}))
+        await state.set_state(NewQuizState.file)
+
+    elif message.text.split(" ")[0].isdigit():
+        duration = int(message.text.split(" ")[0])
 
         if duration in [i for i in range(10, 61, 5)]:
             await state.update_data(test_duration=duration)
-
-            # message_to_user = texts['test_options_number'][user.language]
-            # await message.answer(message_to_user, reply_markup=await reply.generate_markup(
-            #     (3, 4, 5), (1,)
-            # ))
-            # await state.set_state(NewQuizState.max_option)
             await save_data(message, bot, state)
         else:
             message_to_user = texts['below_button'][user.language]
-            await message.answer(message_to_user, reply_markup=await reply.duration_markup())
+            await message.answer(message_to_user, reply_markup=await reply.duration_markup(
+                texts, user.language
+            ))
     else:
         message_to_user = texts['below_button'][user.language]
-        await message.answer(message_to_user, reply_markup=await reply.duration_markup())
+        await message.answer(message_to_user, reply_markup=await reply.duration_markup(
+            texts, user.language
+        ))
 
-# @dp_user.message(NewQuizState.max_option)
-# async def new_quiz_max_option(message: types.Message, bot: Bot, state: FSMContext):
-#     texts = await get_texts(state)
-#     user = await get_user(state, message.from_user.id)
-#
-#     if message.text.isdigit():
-#         max_option = int(message.text)
-#         if max_option in (3, 4, 5):
-#             await state.update_data(test_max_option=max_option)
-#             message_to_user = texts['go_to_main'][user.language]
-#             await message.answer(message_to_user, reply_markup=types.ReplyKeyboardRemove())
-#             await save_data(message, bot, state)
-#
-#         else:
-#             message_to_user = texts['below_button'][user.language]
-#             await message.answer(message_to_user, reply_markup=await reply.generate_markup(
-#                 (3, 4, 5), (1,)
-#             ))
-#     else:
-#         message_to_user = texts['below_button'][user.language]
-#         await message.answer(message_to_user, reply_markup=await reply.generate_markup(
-#             (3, 4, 5), (1,)
-#         ))
+
+@dp_user.callback_query(NewQuizState.title, F.data == "back")
+async def back(call: types.CallbackQuery, state: FSMContext):
+    user = await get_user(state, call.message.chat.id)
+    texts = await get_texts(state)
+
+    message_to_user = f"🤖 {texts['menu'][user.language]} ⬇️"
+    buttons = texts['main_menu_buttons'][user.language]
+    await call.message.edit_text(message_to_user, reply_markup=await inline.main_menu_markup(buttons))
+    await call.answer()
+    await state.clear()
+
+
+@dp_user.callback_query(NewQuizState.file, F.data == "back")
+async def back_to_title(call: types.CallbackQuery, state: FSMContext):
+    user = await get_user(state, call.message.chat.id)
+    texts = await get_texts(state)
+
+    message_to_user = texts['test_title'][user.language]
+    await call.message.delete()
+    await call.message.answer(message_to_user, reply_markup=await inline.generate_markup(
+        {"🔙": "back"}))
+    await state.set_state(NewQuizState.title)
+    await call.answer()
+
+

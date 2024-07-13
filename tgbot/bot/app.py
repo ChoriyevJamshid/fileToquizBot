@@ -1,16 +1,16 @@
 import asyncio
 
-from config.settings import API_TOKEN
+from django.conf import settings
 from aiogram import Bot, Dispatcher, types
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from django.conf import settings
 
 from tgbot.bot.handlers import dp_user, dp_group
 
-bot = Bot(token=API_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+bot = Bot(token=settings.API_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 
 dp = Dispatcher()
+
 dp.include_router(dp_user)
 dp.include_router(dp_group)
 

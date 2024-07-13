@@ -11,56 +11,12 @@ from tgbot.bot.utils import get_texts, get_user
 from tgbot.models import Data
 
 
-# @dp_user.message(InstructionState.instruction)
-# async def instruction(message: types.Message, state: FSMContext, bot: Bot):
-#     user = await get_user(state, message.chat.id)
-#     texts = await get_texts(state)
-#     buttons = texts['instruction_buttons'][user.language]
-#
-#     data = Data.get_solo()
-#     instruction_data = data.data['instruction']
-#     if message.text == f"📝 {buttons[1]}":
-#         file_id = instruction_data.get('photo', None)
-#         message_to_user = f"📝 {texts['text_instruction'][user.language]} 😔"
-#         if file_id:
-#             message_to_user = texts['instruction_text'][user.language]
-#             await message.answer_photo(
-#                 photo=file_id,
-#                 caption=message_to_user,
-#             )
-#         else:
-#             await message.answer(message_to_user)
-#
-#     elif message.text == f"🎬 {buttons[2]}":
-#         message_to_user = f"🎬 {texts['video_instruction'][user.language]} 😔"
-#         video = instruction_data.get('video', None)
-#         if video:
-#             await message.answer_video(
-#                 video=video,
-#             )
-#         else:
-#             await message.answer(message_to_user)
-#
-#     elif message.text == f"🔙 {buttons[3]}":
-#         message_to_user = f"🤖 {texts['menu'][user.language]} ⬇️"
-#         buttons = texts['main_menu_buttons'][user.language]
-#         await message
-#         await message.edit_text(message_to_user, reply_markup=await inline.main_menu_markup(buttons))
-#         await state.clear()
-#
-#     else:
-#         await message.answer(f"🤖 {texts['below_button'][user.language]} 👇")
-
-
 @dp_user.callback_query(F.data.startswith("instruction"))
-async def instruction_callback(call: types.CallbackQuery, state: FSMContext, bot: Bot):
+async def instruction_callback(call: types.CallbackQuery, state: FSMContext):
     user = await get_user(state, call.message.chat.id)
     texts = await get_texts(state)
     buttons = texts['instruction_buttons'][user.language]
-
-    data = Data.get_solo()
-    instruction_data = data.data['instruction']
-
+    back_btn = texts['back'][user.language]
     call_data = call.data.split("_")[-1]
 
     if not user.is_verified:
@@ -68,30 +24,71 @@ async def instruction_callback(call: types.CallbackQuery, state: FSMContext, bot
         user.save(update_fields=['is_verified'])
 
     if call_data == buttons[1]:
-        file_id = instruction_data.get('photo', None)
-        message_to_user = f"📝 {texts['text_instruction'][user.language]} 😔\n\n👉 /start"
-        if file_id:
-            message_to_user = f"{texts['instruction_text'][user.language]}\n\n👉 /start"
-            await call.message.answer_photo(
-                photo=file_id,
-            )
-            await call.message.answer(message_to_user)
-        else:
-            await call.message.answer(message_to_user)
+
+        markup = await inline.generate_markup(
+            buttons={
+                "Word": 'file_photo_word',
+                "Excel": "file_photo_excel",
+                "Text": "file_photo_txt",
+                "Csv": "file_photo_csv",
+                f"🔙 {back_btn}": "file_photo_back"
+            },
+            sizes=(1,)
+        )
+        await call.message.edit_reply_markup(reply_markup=markup)
 
     elif call_data == buttons[2]:
-        message_to_user = f"🎬 {texts['video_instruction'][user.language]} 😔\n\n👉 /start"
-        video = instruction_data.get('video', None)
-        if video:
-            await call.message.answer_video(
-                video=video,
-            )
-        else:
-            await call.message.answer(message_to_user)
+        markup = await inline.generate_markup(
+            buttons={
+                "Word": 'file_video_word',
+                "Excel": "file_video_excel",
+                "Text": "file_video_txt",
+                "Csv": "file_video_csv",
+                f"🔙 {back_btn}": "file_video_back"
+            },
+            sizes=(1,)
+        )
+        await call.message.edit_reply_markup(reply_markup=markup)
 
-    elif call_data == buttons[3]:
+    else:
         message_to_user = f"🤖 {texts['menu'][user.language]} ⬇️"
         buttons = texts['main_menu_buttons'][user.language]
         await call.message.edit_text(message_to_user, reply_markup=await inline.main_menu_markup(buttons))
 
+    await call.answer()
+
+
+@dp_user.callback_query(F.data.startswith("file"))
+async def instruction_files_callback(call: types.CallbackQuery, state: FSMContext):
+    texts = await get_texts(state)
+    user = await get_user(state, call.message.chat.id)
+    data = Data.get_solo()
+
+    _, content_type, file_type = call.data.split("_")
+    file_id = None
+    if file_type in ("word", "excel", "txt", "csv"):
+        file_id = data.data['instruction'][content_type][file_type]
+    else:
+        buttons = texts['instruction_buttons'][user.language]
+        message_to_user = f"🗞 {texts['instruction'][user.language]} 👇"
+        return await call.message.edit_text(
+            message_to_user, reply_markup=await inline.instruction_markup(buttons, (2,))
+        )
+
+    if file_id:
+        msg_to_user = f"{texts['instruction_text'][user.language]}\n\n👉 /start"
+        if content_type == "photo":
+            await call.message.answer_photo(
+                photo=file_id,
+                caption=msg_to_user
+            )
+        else:
+            await call.message.answer_video(
+                video=file_id
+            )
+    else:
+        msg_to_user = f"🎬 {texts['no_video_instruction'][user.language]} 😔\n\n👉 /start"
+        if content_type == "photo":
+            msg_to_user = f"📝 {texts['no_text_instruction'][user.language]} 😔\n\n👉 /start"
+        await call.message.answer(msg_to_user)
     await call.answer()
