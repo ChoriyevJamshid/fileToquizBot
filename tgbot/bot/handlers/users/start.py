@@ -88,7 +88,7 @@ async def change_language(call: types.CallbackQuery, state: FSMContext, texts: d
     user.save(update_fields=["language"])
 
     channels = get_channels()
-    status = await check_subscription(call.bot, user.language, channels)
+    status = await check_subscription(call.bot, user.chat_id, channels)
 
     if not status:
         message_to_user = f"🔔 {texts['subscribe'][user.language]}"
@@ -117,7 +117,7 @@ async def process_check_subscribe(call: types.CallbackQuery, state: FSMContext, 
         channels = data.get("channels")
         if not channels:
             channels = get_channels()
-        status = await check_subscription(bot, call.message.chat.id, channels)
+        status = await check_subscription(call.bot, call.message.chat.id, channels)
         if status:
             message_to_user = f"🤖 {texts['menu'][user.language]} ⬇️"
             buttons = texts['main_menu_buttons'][user.language]
