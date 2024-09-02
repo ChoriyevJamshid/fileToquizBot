@@ -11,10 +11,9 @@ from ...keyboards import inline
 
 
 @dp_user.inline_query(F.query.startswith("share"))
-async def inline_mode_handler(inline_query: types.InlineQuery, state: FSMContext):
+async def inline_mode_handler(inline_query: types.InlineQuery, state: FSMContext, texts: dict):
 
-    user = await get_user(state, inline_query.from_user.id)
-    texts = await get_texts(state)
+    user = await get_user(inline_query.from_user)
 
     language = user.language if user.language else 'uz'
     query = inline_query.query

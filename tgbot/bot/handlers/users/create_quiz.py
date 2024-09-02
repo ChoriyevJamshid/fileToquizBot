@@ -34,10 +34,9 @@ def create_quiz_part(quiz, ques_count, quiz_part_list):
     quiz_part.save()
 
 
-async def save_data(message: types.Message, bot: Bot, state: FSMContext):
+async def save_data(message: types.Message, state: FSMContext, texts: dict):
     data = await state.get_data()
-    user = await get_user(state, message.from_user.id)
-    texts = await get_texts(state)
+    user = await get_user(message.chat)
     try:
         while True:
             new_link = generate_random_string()
@@ -97,21 +96,29 @@ async def save_data(message: types.Message, bot: Bot, state: FSMContext):
 
 
 @dp_user.message(NewQuizState.title)
-async def new_quiz_title(message: types.Message, state: FSMContext):
-    texts = await get_texts(state)
-    user = await get_user(state, message.from_user.id)
+async def new_quiz_title(message: types.Message, state: FSMContext, texts: dict):
+
+    user = await get_user(message.chat)
     if message.content_type == ContentType.TEXT:
+
+        if message.text.startswith("🔙"):
+            message_to_user = f"🤖 {texts['menu'][user.language]} ⬇️"
+            buttons = texts['main_menu_buttons'][user.language]
+            await message.answer('...', reply_markup=await reply.remove_markup())
+            await message.answer(message_to_user, reply_markup=await inline.main_menu_markup(buttons))
+            return await state.clear()
+
+
 
         if Quiz.objects.filter(title=message.text, user=user).exists():
             await message.answer(
-                texts['quiz_title_unique'][user.language],
-                reply_markup=await inline.generate_markup({"🔙": "back"})
+                texts['quiz_title_unique'][user.language]
             )
         else:
             await state.update_data(test_title=message.text)
 
             message_to_user = texts['test_file'][user.language]
-            await message.answer(message_to_user, reply_markup=await inline.generate_markup({"🔙": "back"}))
+            await message.answer(message_to_user)
             await state.set_state(NewQuizState.file)
     else:
         message_to_user = texts['write_text'][user.language]
@@ -119,9 +126,8 @@ async def new_quiz_title(message: types.Message, state: FSMContext):
 
 
 @dp_user.message(NewQuizState.file)
-async def new_quiz_file(message: types.Message, bot: Bot, state: FSMContext):
-    texts = await get_texts(state)
-    user = await get_user(state, message.from_user.id)
+async def new_quiz_file(message: types.Message, bot: Bot, state: FSMContext, texts: dict):
+    user = await get_user(message.chat)
 
     if message.content_type == ContentType.DOCUMENT:
         os.makedirs(f"{settings.BASE_DIR}/media", exist_ok=True)
@@ -176,21 +182,18 @@ async def new_quiz_file(message: types.Message, bot: Bot, state: FSMContext):
 
         else:
             message_to_user = texts['no_file_format'][user.language]
-            await message.answer(
-                message_to_user,
-                reply_markup=await inline.generate_markup({"🔙": "back"})
-            )
+            await message.answer(message_to_user)
 
     else:
         message_answer_text = texts['no_file'][user.language]
         await bot.delete_message(message.from_user.id, message.message_id)
-        await message.answer(message_answer_text, reply_markup=await inline.generate_markup({"🔙": "back"}))
+        await message.answer(message_answer_text)
 
 
 @dp_user.message(NewQuizState.quantity)
-async def new_quiz_quantity(message: types.Message, bot: Bot, state: FSMContext):
-    texts = await get_texts(state)
-    user = await get_user(state, message.from_user.id)
+async def new_quiz_quantity(message: types.Message, state: FSMContext, texts: dict):
+
+    user = await get_user(message.chat)
 
     if message.content_type == ContentType.TEXT:
         if message.text.isdigit():
@@ -221,15 +224,14 @@ async def new_quiz_quantity(message: types.Message, bot: Bot, state: FSMContext)
 
 
 @dp_user.message(NewQuizState.duration)
-async def new_quiz_duration(message: types.Message, bot: Bot, state: FSMContext):
-    texts = await get_texts(state)
-    user = await get_user(state, message.from_user.id)
+async def new_quiz_duration(message: types.Message, state: FSMContext, texts: dict):
+    user = await get_user(message.chat)
 
     if message.text == "🔙 " + texts['back'][user.language]:
         message_to_user = texts['test_file'][user.language]
         msg = await message.answer("Delete reply markup", reply_markup=types.ReplyKeyboardRemove())
-        await bot.delete_message(message.chat.id, msg.message_id)
-        await message.answer(message_to_user, reply_markup=await inline.generate_markup({"🔙": "back"}))
+        await message.bot.delete_message(message.chat.id, msg.message_id)
+        await message.answer(message_to_user)
         await state.set_state(NewQuizState.file)
 
     elif message.text.split(" ")[0].isdigit():
@@ -237,7 +239,7 @@ async def new_quiz_duration(message: types.Message, bot: Bot, state: FSMContext)
 
         if duration in [i for i in range(10, 61, 5)]:
             await state.update_data(test_duration=duration)
-            await save_data(message, bot, state)
+            await save_data(message, state, texts)
         else:
             message_to_user = texts['below_button'][user.language]
             await message.answer(message_to_user, reply_markup=await reply.duration_markup(
@@ -251,9 +253,8 @@ async def new_quiz_duration(message: types.Message, bot: Bot, state: FSMContext)
 
 
 @dp_user.callback_query(NewQuizState.title, F.data == "back")
-async def back(call: types.CallbackQuery, state: FSMContext):
-    user = await get_user(state, call.message.chat.id)
-    texts = await get_texts(state)
+async def back(call: types.CallbackQuery, state: FSMContext, texts: dict):
+    user = await get_user(call.from_user)
 
     message_to_user = f"🤖 {texts['menu'][user.language]} ⬇️"
     buttons = texts['main_menu_buttons'][user.language]
@@ -263,14 +264,12 @@ async def back(call: types.CallbackQuery, state: FSMContext):
 
 
 @dp_user.callback_query(NewQuizState.file, F.data == "back")
-async def back_to_title(call: types.CallbackQuery, state: FSMContext):
-    user = await get_user(state, call.message.chat.id)
-    texts = await get_texts(state)
+async def back_to_title(call: types.CallbackQuery, state: FSMContext, texts: dict):
+    user = await get_user(call.from_user)
 
     message_to_user = texts['test_title'][user.language]
     await call.message.delete()
-    await call.message.answer(message_to_user, reply_markup=await inline.generate_markup(
-        {"🔙": "back"}))
+    await call.message.answer(message_to_user)
     await state.set_state(NewQuizState.title)
     await call.answer()
 

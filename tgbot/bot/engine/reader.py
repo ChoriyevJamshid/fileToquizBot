@@ -14,7 +14,8 @@ async def get_excel_content(file_path, _format):
             result.append(value)
     except Exception as e:
         pass
-    return result
+    _num = len(result) // 5
+    return result[:_num * 5]
 
 
 def get_excel_content_sync(file_path, _format):
@@ -28,7 +29,8 @@ def get_excel_content_sync(file_path, _format):
             result.append(value)
     except Exception as e:
         pass
-    return result
+    _num = len(result) // 5
+    return result[:_num * 5]
 
 
 async def get_docx_content(file_path):
@@ -41,7 +43,8 @@ async def get_docx_content(file_path):
                 result.append(value)
     except Exception as e:
         pass
-    return result
+    _num = len(result) // 5
+    return result[:_num * 5]
 
 
 async def get_txt_content(file_path):
@@ -56,7 +59,8 @@ async def get_txt_content(file_path):
 
     except FileNotFoundError:
         pass
-    return result
+    _num = len(result) // 5
+    return result[:_num * 5]
 
 
 async def get_csv_content(file_path):
@@ -71,5 +75,5 @@ async def get_csv_content(file_path):
                 result.append(value)
     except Exception:
         pass
-    return result
-
+    _num = len(result) // 5
+    return result[:_num * 5]

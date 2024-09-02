@@ -12,9 +12,9 @@ from tgbot.models import Data
 
 
 @dp_user.callback_query(F.data.startswith("instruction"))
-async def instruction_callback(call: types.CallbackQuery, state: FSMContext):
-    user = await get_user(state, call.message.chat.id)
-    texts = await get_texts(state)
+async def instruction_callback(call: types.CallbackQuery, state: FSMContext, texts: dict):
+    user = await get_user(call.from_user)
+
     buttons = texts['instruction_buttons'][user.language]
     back_btn = texts['back'][user.language]
     call_data = call.data.split("_")[-1]
@@ -59,9 +59,9 @@ async def instruction_callback(call: types.CallbackQuery, state: FSMContext):
 
 
 @dp_user.callback_query(F.data.startswith("file"))
-async def instruction_files_callback(call: types.CallbackQuery, state: FSMContext):
-    texts = await get_texts(state)
-    user = await get_user(state, call.message.chat.id)
+async def instruction_files_callback(call: types.CallbackQuery, state: FSMContext, texts: dict):
+
+    user = await get_user(call.from_user)
     data = Data.get_solo()
 
     _, content_type, file_type = call.data.split("_")

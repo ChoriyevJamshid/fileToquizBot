@@ -28,7 +28,7 @@ async def start(message: types.Message, state: FSMContext):
 
     message_data = message.text.split(" ")
     user_id = message.from_user.id
-    user = await get_user(state, user_id)
+    user = await get_user(state)
     texts = await get_texts(state)
 
     language = user.language

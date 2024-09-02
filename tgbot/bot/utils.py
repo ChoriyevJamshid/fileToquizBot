@@ -1,30 +1,30 @@
+from typing import Union
+
 from aiogram import Bot
 from aiogram.enums import ChatMemberStatus
-from aiogram.types import User
+from aiogram.fsm.context import FSMContext
+from aiogram.types import User, Chat
 
 from common.models import RequiredChannel, Text, Language
 from tgbot.models import TelegramProfile
 
 
-def get_or_create_user(chat_id, first_name=None, last_name=None, username=None):
-    user = TelegramProfile.objects.filter(chat_id=chat_id).first()
+def get_or_create_user(chat: Union[Chat, User]):
+    user = TelegramProfile.objects.filter(chat_id=chat.id).first()
 
     if user is None:
         user = TelegramProfile(
-            chat_id=chat_id,
-            first_name=first_name,
-            last_name=last_name,
-            username=username,
+            chat_id=chat.id,
+            first_name=chat.first_name,
+            last_name=chat.last_name,
+            username=chat.username,
         )
         user.save()
     return user
 
 
-async def get_user(state, chat_id, first_name=None, last_name=None, username=None):
-    data = await state.get_data()
-    user = data.get(str(chat_id))
-    if user is None:
-        user = get_or_create_user(chat_id, first_name, last_name, username)
+async def get_user(chat: Union[Chat, User]):
+    user = get_or_create_user(chat)
     return user
 
 

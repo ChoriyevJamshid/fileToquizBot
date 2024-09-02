@@ -1,5 +1,6 @@
 from typing import Optional
 from aiogram.utils.keyboard import ReplyKeyboardBuilder, KeyboardButton
+from aiogram.types import ReplyKeyboardRemove
 
 
 async def generate_markup(items: list | tuple, sizes: tuple, texts: Optional[dict], language: Optional[str]):
@@ -38,3 +39,7 @@ async def quantity_markup(texts: Optional[dict], language: Optional[str]):
 async def instruction_markup(buttons, texts: Optional[dict], language: Optional[str]):
     items = (f"📝 {buttons[1]}", f"🎬 {buttons[2]}", f"🔙 {buttons[3]}")
     return await generate_markup(items, (2,), texts, language)
+
+
+async def remove_markup():
+    return ReplyKeyboardRemove()

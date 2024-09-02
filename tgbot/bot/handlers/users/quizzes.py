@@ -1,10 +1,12 @@
 import asyncio
 import random
 import time
+from typing import Union
 
 from aiogram import Bot, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
+from aiogram.types import Chat, User
 
 from tgbot.bot.handlers.utils import get_time
 
@@ -35,8 +37,8 @@ async def send_animation_numbers(user, call, bot):
     await bot.delete_message(chat_id=user.chat_id, message_id=edited_message.message_id)
 
 
-async def save_user_quiz(chat_id: int | str, state: FSMContext, user_quiz: UserQuizPart) -> UserQuizPart:
-    user = await get_user(state, chat_id)
+async def save_user_quiz(chat, user_quiz: UserQuizPart) -> UserQuizPart:
+    user = await get_user(chat)
 
     current = user.data['current']
 
@@ -64,8 +66,8 @@ async def get_message_statistics(user_quiz: UserQuizPart, texts: dict, lg: str) 
     return msg_to_user
 
 
-async def get_skipped_poll(chat_id: int | str, state: FSMContext, bot: Bot):
-    user = await get_user(state, chat_id)
+async def get_skipped_poll(chat: Union[Chat, User], state: FSMContext, bot: Bot):
+    user = await get_user(chat)
     current = user.data['current']
     texts = await get_texts(state)
 
@@ -130,16 +132,16 @@ async def get_skipped_poll(chat_id: int | str, state: FSMContext, bot: Bot):
             )
 
             await asyncio.sleep(quiz_part.quiz.timer + 1)
-            user = await get_user(state, chat_id)
+            user = await get_user(chat)
             is_active = UserQuizPart.objects.filter(id=current['id']).first().is_active
 
             if is_active and len(user.data['current']['answers']) == index:
-                await get_skipped_poll(chat_id, state, bot)
+                await get_skipped_poll(chat, state, bot)
             return
 
         user.data['current'] = current
         user.save(update_fields=['data'])
-        user_quiz: UserQuizPart = await save_user_quiz(chat_id, state, user_quiz)
+        user_quiz: UserQuizPart = await save_user_quiz(chat, user_quiz)
         await bot.send_message(
             chat_id=user.chat_id,
             text=await get_message_statistics(user_quiz, texts, user.language),
@@ -152,17 +154,19 @@ async def get_skipped_poll(chat_id: int | str, state: FSMContext, bot: Bot):
 
 
 @dp_user.message(Command("stop"))
-async def quiz_part_stop(message: types.Message, state: FSMContext, bot: Bot):
+async def quiz_part_stop(message: types.Message, texts: dict):
     chat_id = message.chat.id
-    user = await get_user(state, chat_id)
-    texts = await get_texts(state)
+    user = await get_user(message.chat)
+    language = user.language
+    if not language:
+        language = 'uz'
 
     _user_quiz = UserQuizPart.objects.filter(user__chat_id=chat_id, is_active=True).first()
     if _user_quiz:
-        user_quiz: UserQuizPart = await save_user_quiz(chat_id, state, _user_quiz)
-        return await bot.send_message(
+        user_quiz: UserQuizPart = await save_user_quiz(message.chat, _user_quiz)
+        return await message.bot.send_message(
             chat_id=user.chat_id,
-            text=await get_message_statistics(user_quiz, texts, user.language),
+            text=await get_message_statistics(user_quiz, texts, language),
             reply_markup=await inline.quiz_retry_markup(
                 texts,
                 user.language,
@@ -175,7 +179,7 @@ async def quiz_part_stop(message: types.Message, state: FSMContext, bot: Bot):
 
 @dp_user.message(F.text.regexp(r"^/[A-Z a-z 0-9]{10}$"))
 async def send_quiz_parts(message: types.Message, bot: Bot, state: FSMContext):
-    user = await get_user(state, message.from_user.id)
+    user = await get_user(message.chat)
     texts = await get_texts(state)
 
     quiz_link = message.text.replace("/", "")
@@ -195,9 +199,8 @@ async def send_quiz_parts(message: types.Message, bot: Bot, state: FSMContext):
 
 
 @dp_user.message(F.text.regexp(r"^/[A-Z a-z 0-9]{12}$"))
-async def send_quiz_questions(message: types.Message, bot: Bot, state: FSMContext):
-    user = await get_user(state, message.from_user.id)
-    texts = await get_texts(state)
+async def send_quiz_questions(message: types.Message, state: FSMContext, texts: dict):
+    user = await get_user(message.chat)
 
     quiz_part_link = message.text.replace("/", "").split("_")[0]
     quiz_part = QuizPart.objects.filter(link=quiz_part_link)
@@ -221,12 +224,13 @@ async def send_quiz_questions(message: types.Message, bot: Bot, state: FSMContex
 
 
 @dp_user.callback_query(F.data.startswith("quiz"))
-async def start_quiz_callback(call: types.CallbackQuery, state: FSMContext, bot: Bot):
-    user = await get_user(state, call.message.chat.id)
-    texts = await get_texts(state)
+async def start_quiz_callback(call: types.CallbackQuery, state: FSMContext, texts: dict):
+    user = await get_user(call.from_user)
+
     function = call.message.edit_text
     _, link = call.data.split("__")
     quiz_part = QuizPart.objects.filter(link=link)
+
     if quiz_part.exists():
         quiz: QuizPart = quiz_part.first()
         questions = quiz.data['questions']
@@ -254,9 +258,9 @@ async def start_quiz_callback(call: types.CallbackQuery, state: FSMContext, bot:
 
 
 @dp_user.callback_query(F.data.startswith("ready"))
-async def get_ready_link(call: types.CallbackQuery, state: FSMContext):
+async def get_ready_link(call: types.CallbackQuery, state: FSMContext, texts: dict):
     chat_id = call.message.chat.id
-    user = await get_user(state, chat_id)
+    user = await get_user(call.from_user)
 
     link = call.data.split("_")[-1]
     quiz_part: QuizPart = QuizPart.objects.filter(link=link).select_related("quiz").first()
@@ -305,25 +309,24 @@ async def get_ready_link(call: types.CallbackQuery, state: FSMContext):
         )
 
         await asyncio.sleep(quiz_part.quiz.timer + 1)
-        user = await get_user(state, chat_id)
+        user = await get_user(call.from_user)
+
         is_active = UserQuizPart.objects.filter(id=user_quiz.pk).first().is_active
         if is_active and len(user.data['current']['answers']) == index:
-            await get_skipped_poll(chat_id, state, call.bot)
+            await get_skipped_poll(call.from_user, state, call.bot)
 
 
 @dp_user.callback_query(F.data.startswith("continue"))
-async def continue_poll(call: types.CallbackQuery, state: FSMContext, bot: Bot):
-    user = await get_user(state, call.message.chat.id)
+async def continue_poll(call: types.CallbackQuery, state: FSMContext, texts: dict):
+
     await call.message.delete()
-    await get_skipped_poll(call.message.chat.id, state, call.bot)
+    await get_skipped_poll(call.from_user, state, call.bot)
 
 
 @dp_user.poll_answer()
-async def get_user_poll_answer(poll_answer: types.PollAnswer, state: FSMContext):
-
+async def get_user_poll_answer(poll_answer: types.PollAnswer, state: FSMContext, texts: dict):
     chat_id = poll_answer.user.id
-    user = await get_user(state, chat_id)
-    texts = await get_texts(state)
+    user = await get_user(poll_answer.user)
 
     current = user.data.get('current', None)
     if current:
@@ -377,15 +380,16 @@ async def get_user_poll_answer(poll_answer: types.PollAnswer, state: FSMContext)
             )
 
             await asyncio.sleep(quiz_part.quiz.timer + 1)
-            user = await get_user(state, chat_id)
+
+            user = await get_user(poll_answer.user)
             is_active = UserQuizPart.objects.filter(id=current['id']).first().is_active
 
             if is_active and len(user.data['current']['answers']) == index:
-                await get_skipped_poll(chat_id, state, poll_answer.bot)
+                await get_skipped_poll(poll_answer.user, state, poll_answer.bot)
             return
         user.data['current'] = current
         user.save(update_fields=['data'])
-        user_quiz: UserQuizPart = await save_user_quiz(chat_id, state, user_quiz)
+        user_quiz: UserQuizPart = await save_user_quiz(chat_id, user_quiz)
         await poll_answer.bot.send_message(
             chat_id=user.chat_id,
             text=await get_message_statistics(user_quiz, texts, user.language),

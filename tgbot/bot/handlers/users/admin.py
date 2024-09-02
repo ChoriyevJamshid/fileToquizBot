@@ -9,7 +9,7 @@ from tgbot.models import Data
 
 @dp_user.message(Command("admin"))
 async def admin(message: types.Message, state: FSMContext):
-    user = await get_user(state, message.chat.id)
+    user = await get_user(state)
 
     if user.is_admin:
         await message.answer(
@@ -21,7 +21,7 @@ async def admin(message: types.Message, state: FSMContext):
 @dp_user.message(F.video)
 @dp_user.message(F.photo)
 async def get_photo(message: types.Message, state: FSMContext, bot: Bot):
-    user = await get_user(state, message.chat.id)
+    user = await get_user(state)
 
     if user.is_admin:
         data = Data.get_solo()

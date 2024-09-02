@@ -37,15 +37,18 @@ async def languages_markup(languages, link=""):
 
 async def main_menu_markup(buttons: dict):
     markup = InlineKeyboardBuilder()
-    markup.add(InlineKeyboardButton(
-        text=f"🗞 {buttons[1]}", callback_data=f"menu_{1}"))
-    markup.add(InlineKeyboardButton(
-        text=f"🖌 {buttons[2]}", callback_data=f"menu_{2}"))
+    markup2 = InlineKeyboardBuilder()
     markup.add(InlineKeyboardButton(
         text=f"📖 {buttons[3]}", callback_data=f"menu_{3}"))
     markup.add(InlineKeyboardButton(
+        text=f"🖌 {buttons[2]}", callback_data=f"menu_{2}"))
+    markup2.add(InlineKeyboardButton(
+        text=f"🗞 {buttons[1]}", callback_data=f"menu_{1}"))
+    markup2.add(InlineKeyboardButton(
         text=f"⚙️ {buttons[4]}", callback_data=f"menu_{4}"))
-    return markup.adjust(*(2,)).as_markup()
+    markup.adjust(*(2,))
+    markup2.adjust(*(1,))
+    return markup.attach(markup2).as_markup()
 
 
 # async def user_tests_markup(buttons, state):
@@ -88,7 +91,7 @@ async def main_menu_markup(buttons: dict):
 #     return markup.as_markup()
 
 
-async def pagination_markup(total_page, current_page):
+async def pagination_markup(texts: dict, language: str, total_page, current_page):
     keyboard = InlineKeyboardBuilder()
 
     if current_page > 1:
@@ -106,8 +109,9 @@ async def pagination_markup(total_page, current_page):
         keyboard.add(
             InlineKeyboardButton(text="➡️", callback_data=f"pagination_{current_page + 1}")
         )
-
-    return keyboard.adjust(*(3,)).as_markup()
+    keyboard2 = InlineKeyboardBuilder().add(InlineKeyboardButton(
+        text=texts['menu'][language], callback_data="pagination_menu"))
+    return keyboard.adjust(*(3,)).attach(keyboard2).as_markup()
 
 
 async def instruction_markup(buttons, sizes=(1,)):

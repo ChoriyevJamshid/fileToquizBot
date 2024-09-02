@@ -3,7 +3,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram import Bot, types, Router, F
 from aiogram.filters import CommandStart
 
-from tgbot.bot.keyboards import inline
+from tgbot.bot.keyboards import inline, reply
 from tgbot.bot.states.main import NewQuizState
 from tgbot.bot.utils import check_subscription, get_channels, get_user, get_texts, get_languages
 from tgbot.models import Quiz, QuizPart, TelegramProfile
@@ -40,15 +40,11 @@ async def send_quiz(message: types.Message, user: TelegramProfile, texts: dict, 
 
 
 @dp_user.message(CommandStart())
-async def start(message: types.Message, bot: Bot, state: FSMContext):
+async def start(message: types.Message, state: FSMContext, texts: dict):
     await state.clear()
     data = await state.get_data()
 
-    chat_id = message.chat.id
-    user = await get_user(state, chat_id,
-                          message.from_user.first_name,
-                          message.from_user.last_name,
-                          message.from_user.username)
+    user = await get_user(message.chat)
     lang = user.language
     text_data = message.text.split(" ")
 
@@ -59,11 +55,10 @@ async def start(message: types.Message, bot: Bot, state: FSMContext):
         await message.answer(message_to_user, reply_markup=await inline.languages_markup(languages, link))
     else:
         channels = data.get("channels")
-        texts = await get_texts(state)
 
         if not channels:
             channels = get_channels()
-        status = await check_subscription(bot, chat_id, channels)
+        status = await check_subscription(message.bot, user.chat_id, channels)
 
         if not status:
             message_to_user = f"🔔 {texts['subscribe'][user.language]}"
@@ -83,19 +78,18 @@ async def start(message: types.Message, bot: Bot, state: FSMContext):
 
 
 @dp_user.callback_query(F.data.startswith("lang"))
-async def change_language(call: types.CallbackQuery, bot: Bot, state: FSMContext):
-    chat_id = call.message.chat.id
+async def change_language(call: types.CallbackQuery, state: FSMContext, texts: dict):
     data = await state.get_data()
 
     _, code, link = call.data.split("_")
 
-    user = await get_user(state, chat_id)
+    user = await get_user(call.from_user)
     user.language = code
     user.save(update_fields=["language"])
 
     channels = get_channels()
-    status = await check_subscription(bot, chat_id, channels)
-    texts = await get_texts(state)
+    status = await check_subscription(call.bot, user.language, channels)
+
     if not status:
         message_to_user = f"🔔 {texts['subscribe'][user.language]}"
         await call.message.answer(message_to_user,
@@ -115,9 +109,9 @@ async def change_language(call: types.CallbackQuery, bot: Bot, state: FSMContext
 
 
 @dp_user.callback_query(F.data.startswith("check"))
-async def process_check_subscribe(call: types.CallbackQuery, bot: Bot, state: FSMContext):
+async def process_check_subscribe(call: types.CallbackQuery, state: FSMContext, texts: dict):
     data = await state.get_data()
-    user = await get_user(state, call.from_user.id)
+    user = await get_user(state)
     texts = await get_texts(state)
     if call.data.split("_")[1] == "subscription":
         channels = data.get("channels")
@@ -125,9 +119,9 @@ async def process_check_subscribe(call: types.CallbackQuery, bot: Bot, state: FS
             channels = get_channels()
         status = await check_subscription(bot, call.message.chat.id, channels)
         if status:
-            message_to_user = texts['menu'][user.language]
-
-            await call.message.answer(message_to_user, reply_markup=None)
+            message_to_user = f"🤖 {texts['menu'][user.language]} ⬇️"
+            buttons = texts['main_menu_buttons'][user.language]
+            await call.message.answer(message_to_user, reply_markup=await inline.main_menu_markup(buttons))
         else:
             text = texts['not_subscribe'][user.language]
             await call.answer(text, show_alert=True)
@@ -135,10 +129,12 @@ async def process_check_subscribe(call: types.CallbackQuery, bot: Bot, state: FS
 
 
 @dp_user.callback_query(F.data.startswith("menu"))
-async def process_menu(call: types.CallbackQuery, bot: Bot, state: FSMContext):
-    data = await state.get_data()
-    user = await get_user(state, call.from_user.id)
-    texts = await get_texts(state)
+async def process_menu(call: types.CallbackQuery, state: FSMContext, texts: dict):
+    user = await get_user(call.from_user)
+
+    language = user.language
+    if not language:
+        language = 'uz'
 
     if call.data.split("_")[-1] == "1":
         buttons = texts['instruction_buttons'][user.language]
@@ -148,17 +144,20 @@ async def process_menu(call: types.CallbackQuery, bot: Bot, state: FSMContext):
         )
 
     if call.data.split("_")[-1] == "2":
+        await call.message.delete_reply_markup()
         if user.is_verified:
             message_to_user = texts['test_title'][user.language]
-            await call.message.answer(message_to_user, reply_markup=await inline.generate_markup(
-                {"🔙": "back"}))
+            await call.message.answer(message_to_user, reply_markup=await reply.generate_markup(
+                {}, (1,), texts, language
+            ))
             await state.set_state(NewQuizState.title)
         else:
             message_to_user = texts['no_verified'][user.language]
-            await call.message.answer(message_to_user, reply_markup=None)
+            await call.answer(message_to_user)
 
     if call.data.split("_")[-1] == "3":
         quizzes = Quiz.objects.filter(user_id=user.id)
+
         if quizzes.exists():
 
             message_to_user = ""
@@ -173,16 +172,15 @@ async def process_menu(call: types.CallbackQuery, bot: Bot, state: FSMContext):
 
             for i in range((current_page - 1) * PAGINATE_BY, to_number):
                 message_to_user += f"<b>{i + 1}</b>. <i>{quizzes[i].title}</i> 👉 /{quizzes[i].link}\n"
-            message_to_user += f"\n{texts['menu'][user.language]} 👉 /start"
 
             if total_page > 1:
-                markup = await inline.pagination_markup(total_page, current_page)
+                markup = await inline.pagination_markup(texts, language, total_page, current_page)
 
             user.data['current_page'] = current_page
             user.data['total_page'] = total_page
             user.save(update_fields=["data"])
 
-            await call.message.answer(message_to_user, reply_markup=markup)
+            await call.message.edit_text(message_to_user, reply_markup=markup)
 
         else:
             message_to_user = texts['no_quizzes'][user.language]
@@ -197,13 +195,23 @@ async def process_menu(call: types.CallbackQuery, bot: Bot, state: FSMContext):
 
 
 @dp_user.callback_query(F.data.startswith("pagination"))
-async def process_pagination(call: types.CallbackQuery, bot: Bot, state: FSMContext):
-    user = await get_user(state, call.from_user.id)
-    texts = await get_texts(state)
+async def process_pagination(call: types.CallbackQuery, state: FSMContext, texts: dict):
+    user = await get_user(call.from_user)
 
-    page_number = int(call.data.split("_")[-1])
+    language = user.language
+    if not language:
+        language = 'uz'
+
+    page_number = call.data.split("_")[-1]
     current_page = int(user.data.get("current_page", 1))
     total_page = int(user.data.get("total_page"))
+
+    if page_number == "menu":
+        message_to_user = f"🤖 {texts['menu'][user.language]} ⬇️"
+        buttons = texts['main_menu_buttons'][user.language]
+        return await call.message.edit_text(message_to_user, reply_markup=await inline.main_menu_markup(buttons))
+
+    page_number = int(page_number)
 
     if page_number != current_page:
         current_page = page_number
@@ -214,7 +222,6 @@ async def process_pagination(call: types.CallbackQuery, bot: Bot, state: FSMCont
         message_to_user = ""
         for i in range((current_page - 1) * PAGINATE_BY, to_number):
             message_to_user += f"<b>{i + 1}</b>. <i>{quizzes[i].title}</i> 👉 /{quizzes[i].link}\n"
-        message_to_user += f"\n{texts['menu'][user.language]} 👉 /start"
 
         user.data['current_page'] = current_page
         user.data['total_page'] = total_page
@@ -222,4 +229,6 @@ async def process_pagination(call: types.CallbackQuery, bot: Bot, state: FSMCont
 
         await call.message.edit_text(
             message_to_user,
-            reply_markup=await inline.pagination_markup(total_page, current_page))
+            reply_markup=await inline.pagination_markup(texts, language, total_page, current_page))
+
+    await call.answer()
