@@ -67,10 +67,10 @@ class Text(BaseModel):
 
         super().save(*args, **kwargs)
 
-    @classmethod
-    def texts_data(cls):
+    @staticmethod
+    def texts_data():
         data = {}
-        texts = cls.objects.all().select_related('language')
+        texts = Text.objects.all().select_related('language')
         for text in texts:
 
             code = str(text.code)
@@ -79,11 +79,11 @@ class Text(BaseModel):
                 data[code] = {}
 
             if data[code].get(lang) is None:
-                if text.type == cls.TextType.TEXT:
+                if text.type == Text.TextType.TEXT:
                     data[code][lang] = None
                 else:
                     data[code][lang] = {}
-            if text.type == cls.TextType.TEXT:
+            if text.type == Text.TextType.TEXT:
                 data[code][lang] = clean_html_for_telegram(text.title)
             else:
                 data[code][lang][text.order] = clean_html_for_telegram(text.title)
