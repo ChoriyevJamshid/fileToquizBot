@@ -37,7 +37,8 @@ async def send_animation_numbers(user, call, bot):
     await bot.delete_message(chat_id=user.chat_id, message_id=edited_message.message_id)
 
 
-async def save_user_quiz(chat, user_quiz: UserQuizPart) -> UserQuizPart:
+async def save_user_quiz(chat_id, user_quiz: UserQuizPart) -> UserQuizPart:
+    chat = Chat(id=chat_id, type="private")
     user = await get_user(chat)
 
     current = user.data['current']
@@ -107,8 +108,8 @@ async def get_skipped_poll(chat: Union[Chat, User], state: FSMContext, bot: Bot)
         if index < quiz_part.quantity:
             quantity = quiz_part.quantity
             question = user.data['questions'][index]['question']
-            options = quiz_part.data['questions'][index]['options']
-            correct_option = quiz_part.data['questions'][index]['correct_option']
+            options = user.data['questions'][index]['options']
+            correct_option = user.data['questions'][index]['correct_option']
 
             random.shuffle(options)
             correct_option_id = lambda correct_option, options: [
@@ -163,7 +164,7 @@ async def quiz_part_stop(message: types.Message, texts: dict):
 
     _user_quiz = UserQuizPart.objects.filter(user__chat_id=chat_id, is_active=True).first()
     if _user_quiz:
-        user_quiz: UserQuizPart = await save_user_quiz(message.chat, _user_quiz)
+        user_quiz: UserQuizPart = await save_user_quiz(message.chat.id, _user_quiz)
         return await message.bot.send_message(
             chat_id=user.chat_id,
             text=await get_message_statistics(user_quiz, texts, language),
@@ -177,6 +178,7 @@ async def quiz_part_stop(message: types.Message, texts: dict):
     await message.answer(text=f"🤖 {texts['no_test'][user.language]}")
 
 
+# quiz
 @dp_user.message(F.text.regexp(r"^/[A-Z a-z 0-9]{10}$"))
 async def send_quiz_parts(message: types.Message, bot: Bot, state: FSMContext):
     user = await get_user(message.chat)
@@ -187,40 +189,41 @@ async def send_quiz_parts(message: types.Message, bot: Bot, state: FSMContext):
         quiz__link=quiz_link, quiz__user__id=user.id
     ).select_related("quiz", "quiz__user").order_by("id")
 
-    if parts:
-        message_to_user = ""
-        for index, part in enumerate(parts, start=1):
-            message_to_user += f"<b>{index}</b>. <i>{part.quiz.title}</i> <b>[{part.from_number} - {part.to_number}]</b> 👉 /{part.link}\n"
+    if not parts:
+        return await message.delete()
 
-        message_to_user += f"\n{texts['menu'][user.language]} 👉 /start"
-        await message.answer(message_to_user)
-    else:
-        await message.delete()
+    message_to_user = ""
+    for index, part in enumerate(parts, start=1):
+        message_to_user += f"<b>{index}</b>. <i>{part.quiz.title}</i> <b>[{part.from_number} - {part.to_number}]</b> 👉 /{part.link}\n"
+
+    message_to_user += f"\n{texts['menu'][user.language]} 👉 /start"
+    await message.answer(message_to_user)
 
 
+# quiz part
 @dp_user.message(F.text.regexp(r"^/[A-Z a-z 0-9]{12}$"))
 async def send_quiz_questions(message: types.Message, state: FSMContext, texts: dict):
     user = await get_user(message.chat)
 
     quiz_part_link = message.text.replace("/", "").split("_")[0]
-    quiz_part = QuizPart.objects.filter(link=quiz_part_link)
-    if quiz_part.exists():
-        quiz: QuizPart = quiz_part.first()
-        ques_text = texts['questions'][user.language]
-        timer_text = texts['seconds'][user.language]
-        message_to_user = f"""
+    quiz_part = QuizPart.objects.filter(link=quiz_part_link).first()
+
+    if not quiz_part:
+        return await message.delete()
+
+    quiz: QuizPart = quiz_part
+    ques_text = texts['questions'][user.language]
+    timer_text = texts['seconds'][user.language]
+    message_to_user = f"""
 [{quiz.from_number} - {quiz.to_number}] {quiz.quiz.title}
 🖋 {quiz.to_number - quiz.from_number + 1} {ques_text} | ⏱ {quiz.quiz.timer}-{timer_text}
 
 {str(texts['stop_text'][user.language])}
 """
-        await message.answer(
-            message_to_user,
-            reply_markup=await inline.quiz_markup(texts, user.language, quiz_part_link)
-        )
-
-    else:
-        await message.delete()
+    await message.answer(
+        message_to_user,
+        reply_markup=await inline.quiz_markup(texts, user.language, quiz_part_link)
+    )
 
 
 @dp_user.callback_query(F.data.startswith("quiz"))
@@ -229,11 +232,9 @@ async def start_quiz_callback(call: types.CallbackQuery, state: FSMContext, text
 
     function = call.message.edit_text
     _, link = call.data.split("__")
-    quiz_part = QuizPart.objects.filter(link=link)
+    quiz = QuizPart.objects.filter(link=link).first()
 
-    if quiz_part.exists():
-        quiz: QuizPart = quiz_part.first()
-        questions = quiz.data['questions']
+    if quiz:
         ques_text = texts['questions'][user.language]
         timer_text = texts['duration'][user.language]
         message_to_user = f"""
@@ -259,7 +260,6 @@ async def start_quiz_callback(call: types.CallbackQuery, state: FSMContext, text
 
 @dp_user.callback_query(F.data.startswith("ready"))
 async def get_ready_link(call: types.CallbackQuery, state: FSMContext, texts: dict):
-    chat_id = call.message.chat.id
     user = await get_user(call.from_user)
 
     link = call.data.split("_")[-1]
@@ -283,10 +283,11 @@ async def get_ready_link(call: types.CallbackQuery, state: FSMContext, texts: di
         index = user.data['current']['i'] = 0
 
         random.shuffle(user.data['questions'])
+        questions = user.data['questions']
         quantity = quiz_part.quantity
-        question = user.data['questions'][index]['question']
-        options = quiz_part.data['questions'][index]['options']
-        correct_option = quiz_part.data['questions'][index]['correct_option']
+        question = questions[index]['question']
+        options = questions[index]['options']
+        correct_option = questions[index]['correct_option']
 
         random.shuffle(options)
         correct_option_id = lambda correct_option, options: [
@@ -318,7 +319,6 @@ async def get_ready_link(call: types.CallbackQuery, state: FSMContext, texts: di
 
 @dp_user.callback_query(F.data.startswith("continue"))
 async def continue_poll(call: types.CallbackQuery, state: FSMContext, texts: dict):
-
     await call.message.delete()
     await get_skipped_poll(call.from_user, state, call.bot)
 
@@ -355,8 +355,8 @@ async def get_user_poll_answer(poll_answer: types.PollAnswer, state: FSMContext,
         if index < quiz_part.quantity:
             quantity = quiz_part.quantity
             question = user.data['questions'][index]['question']
-            options = quiz_part.data['questions'][index]['options']
-            correct_option = quiz_part.data['questions'][index]['correct_option']
+            options = user.data['questions'][index]['options']
+            correct_option = user.data['questions'][index]['correct_option']
 
             random.shuffle(options)
             correct_option_id = lambda correct_option, options: [
@@ -390,6 +390,7 @@ async def get_user_poll_answer(poll_answer: types.PollAnswer, state: FSMContext,
         user.data['current'] = current
         user.save(update_fields=['data'])
         user_quiz: UserQuizPart = await save_user_quiz(chat_id, user_quiz)
+
         await poll_answer.bot.send_message(
             chat_id=user.chat_id,
             text=await get_message_statistics(user_quiz, texts, user.language),

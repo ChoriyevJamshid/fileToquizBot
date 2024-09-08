@@ -42,8 +42,6 @@ async def send_quiz(message: types.Message, user: TelegramProfile, texts: dict, 
 @dp_user.message(CommandStart())
 async def start(message: types.Message, state: FSMContext, texts: dict):
     await state.clear()
-    data = await state.get_data()
-
     user = await get_user(message.chat)
     lang = user.language
     text_data = message.text.split(" ")
@@ -52,34 +50,31 @@ async def start(message: types.Message, state: FSMContext, texts: dict):
         message_to_user = "🌐 Til tanlash uchun quidagil tugmalardan foydalaning. 👇"
         languages = await get_languages(state)
         link = text_data[-1] if len(text_data) == 2 else ""
-        await message.answer(message_to_user, reply_markup=await inline.languages_markup(languages, link))
-    else:
-        channels = data.get("channels")
+        return await message.answer(message_to_user, reply_markup=await inline.languages_markup(languages, link))
 
-        if not channels:
-            channels = get_channels()
-        status = await check_subscription(message.bot, user.chat_id, channels)
+    channels = get_channels()
+    status = await check_subscription(message.bot, user.chat_id, channels)
 
-        if not status:
-            message_to_user = f"🔔 {texts['subscribe'][user.language]}"
-            await message.answer(
-                message_to_user,
-                reply_markup=await inline.channels_markup(
-                    channels,
-                    text=f"✅ {texts['check_subscribe'][user.language]}",
-                ))
-        else:
-            if len(text_data) > 1:
-                await send_quiz(message, user, texts)
-            else:
-                message_to_user = f"🤖 {texts['menu'][user.language]} ⬇️"
-                buttons = texts['main_menu_buttons'][user.language]
-                await message.answer(message_to_user, reply_markup=await inline.main_menu_markup(buttons))
+    if not status:
+        message_to_user = f"🔔 {texts['subscribe'][user.language]}"
+
+        return await message.answer(
+            message_to_user,
+            reply_markup=await inline.channels_markup(
+                channels,
+                text=f"✅ {texts['check_subscribe'][user.language]}",
+            ))
+
+    if len(text_data) > 1:
+        return await send_quiz(message, user, texts)
+
+    message_to_user = f"🤖 {texts['menu'][user.language]} ⬇️"
+    buttons = texts['main_menu_buttons'][user.language]
+    await message.answer(message_to_user, reply_markup=await inline.main_menu_markup(buttons))
 
 
 @dp_user.callback_query(F.data.startswith("lang"))
 async def change_language(call: types.CallbackQuery, state: FSMContext, texts: dict):
-    data = await state.get_data()
 
     _, code, link = call.data.split("_")
 
@@ -138,29 +133,30 @@ async def process_menu(call: types.CallbackQuery, state: FSMContext, texts: dict
 
     if call.data.split("_")[-1] == "1":
         buttons = texts['instruction_buttons'][user.language]
-        message_to_user = f"🗞 {texts['instruction'][user.language]} 👇"
+        message_to_user = (f"🗞 <b>{texts['instruction'][user.language]}.</b>\n"
+                           f"{texts['instruction_text'][user.language]}")
         await call.message.edit_text(
             message_to_user, reply_markup=await inline.instruction_markup(buttons, (2,))
         )
 
     if call.data.split("_")[-1] == "2":
-        await call.message.delete_reply_markup()
         if user.is_verified:
             message_to_user = texts['test_title'][user.language]
+            await call.message.delete_reply_markup()
             await call.message.answer(message_to_user, reply_markup=await reply.generate_markup(
                 {}, (1,), texts, language
             ))
-            await state.set_state(NewQuizState.title)
-        else:
-            message_to_user = texts['no_verified'][user.language]
-            await call.answer(message_to_user)
+            return await state.set_state(NewQuizState.title)
+
+        message_to_user = texts['no_verified'][user.language]
+        await call.answer(message_to_user)
 
     if call.data.split("_")[-1] == "3":
         quizzes = Quiz.objects.filter(user_id=user.id)
 
         if quizzes.exists():
 
-            message_to_user = ""
+            message_to_user = f'<b>📃 {texts["test_list"][language]}\n\n</b>'
             markup = None
 
             PAGINATE_BY = settings.PAGINATE_BY
@@ -180,11 +176,10 @@ async def process_menu(call: types.CallbackQuery, state: FSMContext, texts: dict
             user.data['total_page'] = total_page
             user.save(update_fields=["data"])
 
-            await call.message.edit_text(message_to_user, reply_markup=markup)
+            return await call.message.edit_text(message_to_user, reply_markup=markup)
 
-        else:
-            message_to_user = texts['no_quizzes'][user.language]
-            await call.message.answer(message_to_user, reply_markup=None)
+        message_to_user = texts['no_quizzes'][user.language]
+        await call.message.answer(message_to_user, reply_markup=None)
 
     if call.data.split("_")[-1] == "4":
         message_to_user = f"🌐 {texts['change_language'][user.language]} 👇"

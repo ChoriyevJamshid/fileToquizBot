@@ -1,0 +1,85 @@
+version: "3.7"
+
+services:
+    db:
+        image: postgres:14
+        env_file:
+            - .env
+        volumes:
+            - postgres_data:/var/lib/postgresql/data/
+        environment:
+            - POSTGRES_USER=${DB_USER}
+            - POSTGRES_PASSWORD=${DB_PASSWORD}
+            - POSTGRES_HOST=${DB_HOST}
+            - POSTGRES_DB=${DB_NAME}
+            - POSTGRES_PORT=${DB_PORT}
+        restart: always
+
+    redis:
+        image: redis:6-alpine
+        restart: always
+
+    web_django: &web_django
+        restart: always
+        build:
+            context: ./
+            dockerfile: Dockerfile
+        #    command: python3 manage.py runserver 0.0.0.0:9000
+        command: gunicorn src.wsgi:application --bind 0.0.0.0:8001 --workers=2 --threads=2 --worker-class=gthread
+        security_opt:
+            - seccomp:unconfined
+        volumes:
+            - ./:/app
+            - ./static:/app/static
+            - ./media:/app/media
+            - ./locale:/app/locale
+        env_file:
+            - .env
+        environment:
+            - TZ=Asia/Tashkent
+        ports:
+            - 8001:8001
+        depends_on:
+            - db
+            - redis
+
+    bot:
+        <<: *web_django
+        ports: [ ]
+        restart: always
+        container_name: fileToQuiz_bot
+        command: python manage.py runbot
+
+    celery_worker:
+        build:
+            context: ./
+            dockerfile: Dockerfile
+        restart: always
+        command: celery -A scr worker --concurrency=2 --loglevel=INFO
+        volumes:
+            - .:/app
+        env_file:
+            - ./.env
+        depends_on:
+            - redis
+            - db
+
+    celery_beat:
+        build:
+            context: ./
+            dockerfile: Dockerfile
+        restart: always
+        command: celery -A src beat -l INFO
+        volumes:
+            - .:/app
+        env_file:
+            - ./.env
+        depends_on:
+            - redis
+            - celery_worker
+            - db
+
+
+volumes:
+    postgres_data:
+    static_volume:

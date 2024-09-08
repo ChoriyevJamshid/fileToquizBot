@@ -1,6 +1,7 @@
 from django.contrib import admin
+from import_export.admin import ImportExportModelAdmin
 from solo.admin import SingletonModelAdmin
-from . import models
+from . import models, resources
 
 
 class QuizPartInline(admin.TabularInline):
@@ -9,10 +10,11 @@ class QuizPartInline(admin.TabularInline):
 
 
 @admin.register(models.TelegramProfile)
-class TelegramProfileAdmin(admin.ModelAdmin):
-    list_display = ('id', 'chat_id', 'first_name', 'last_name', 'username', 'language', 'is_verified', 'is_admin')
+class TelegramProfileAdmin(ImportExportModelAdmin, admin.ModelAdmin):
+    list_display = ('id', 'chat_id', 'first_name', 'username', 'language', 'is_verified', 'is_notif', 'is_admin')
     list_display_links = ('id', 'chat_id')
-    list_editable = ('is_admin', 'is_verified')
+    list_editable = ('is_admin', 'is_verified', 'is_notif')
+    resource_class = resources.TelegramProfileResource
 
 
 # @admin.register(models.Test)
@@ -43,7 +45,7 @@ class GroupQuizPartAdmin(admin.ModelAdmin):
 
 @admin.register(models.QuizPart)
 class QuizPartAdmin(admin.ModelAdmin):
-    pass
+    list_display = ('link', 'quiz', 'from_number', 'to_number', 'quantity')
 
 
 # @admin.register(models.Question)

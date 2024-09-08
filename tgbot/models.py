@@ -1,5 +1,3 @@
-import uuid
-
 from django.db import models
 from solo.models import SingletonModel
 
@@ -32,6 +30,7 @@ class TelegramProfile(BaseModel):
 
     is_verified = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
+    is_notif = models.BooleanField(default=True)
     is_admin = models.BooleanField(default=False)
 
     data = models.JSONField(blank=True, null=True)
@@ -230,10 +229,12 @@ class Data(SingletonModel):
             self.data['instruction']['video'] = dict()
             self.data['instruction']['photo']['word'] = ""
             self.data['instruction']['photo']['excel'] = ""
+            self.data['instruction']['photo']['pdf'] = ""
             self.data['instruction']['photo']['txt'] = ""
             self.data['instruction']['photo']['csv'] = ""
             self.data['instruction']['video']['word'] = ""
             self.data['instruction']['video']['excel'] = ""
+            self.data['instruction']['video']['pdf'] = ""
             self.data['instruction']['video']['txt'] = ""
             self.data['instruction']['video']['csv'] = ""
 

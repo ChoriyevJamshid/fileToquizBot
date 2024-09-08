@@ -9,11 +9,11 @@ from tgbot.models import Data
 
 @dp_user.message(Command("admin"))
 async def admin(message: types.Message, state: FSMContext):
-    user = await get_user(state)
+    user = await get_user(message.chat)
 
     if user.is_admin:
         await message.answer(
-            text="Help texts with photo: word, excel, txt, csv\nHelp texts with video: word, excel, txt, csv"
+            text="Help texts with photo: word, excel, pdf, txt, csv\nHelp texts with video: word, excel, pdf, txt, csv"
         )
 
 
@@ -21,7 +21,7 @@ async def admin(message: types.Message, state: FSMContext):
 @dp_user.message(F.video)
 @dp_user.message(F.photo)
 async def get_photo(message: types.Message, state: FSMContext, bot: Bot):
-    user = await get_user(state)
+    user = await get_user(message.chat)
 
     if user.is_admin:
         data = Data.get_solo()

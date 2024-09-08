@@ -1,5 +1,4 @@
 import os
-import random
 
 from aiogram import Bot, types, F
 from aiogram.enums import ContentType
@@ -8,29 +7,27 @@ from django.conf import settings
 
 from tgbot.bot.keyboards import reply, inline
 from tgbot.bot.states.main import NewQuizState
-from tgbot.bot.engine import reader
-from tgbot.bot.utils import get_texts, get_user
+from tgbot.bot import engine
+from tgbot.bot.utils import get_user
 
 from tgbot.models import Quiz, QuizPart
 from tgbot.bot.handlers.users import dp_user
 from tgbot.bot.handlers.utils import generate_random_string
 
 
-def create_quiz_part(quiz, ques_count, quiz_part_list):
+def create_quiz_part(quiz_id: int, question_list: list, from_number: int, to_number: int):
     while True:
         new_link = generate_random_string(length=12)
         if not QuizPart.objects.filter(link=new_link).exists():
             break
 
-    from_number = ques_count - 24 if ques_count - 24 > 0 else 1
-
     quiz_part = QuizPart.objects.create(
-        quiz_id=quiz.id,
+        quiz_id=quiz_id,
         link=new_link,
         from_number=from_number,
-        to_number=ques_count,
+        to_number=to_number,
     )
-    quiz_part.data['questions'] = quiz_part_list
+    quiz_part.data['questions'] = question_list
     quiz_part.save()
 
 
@@ -42,6 +39,7 @@ async def save_data(message: types.Message, state: FSMContext, texts: dict):
             new_link = generate_random_string()
             if not Quiz.objects.filter(link=new_link).exists():
                 break
+
         quiz = Quiz.objects.create(
             user_id=user.id,
             title=data.get("test_title"),
@@ -56,48 +54,29 @@ async def save_data(message: types.Message, state: FSMContext, texts: dict):
             reply_markup=types.ReplyKeyboardRemove()
         )
 
-    if quiz:
-        quiz_part_list = list()
-        question_data = None
-        ques_count = 0
-        is_correct = False
-        for index, value in enumerate(data.get("test_questions"), start=1):
+    if not quiz:
+        return await state.clear()
 
-            if index % 5 == 1:
-                ques_count += 1
-                question_data = dict()
-                question_data['question'] = str(value)
-                question_data['options'] = []
-                is_correct = True
-            else:
-                question_data['options'].append(str(value))
-                if is_correct:
-                    question_data['correct_option'] = str(value)
-                    is_correct = False
+    question_list = data.get('questions')
+    quantity = len(question_list)
+    cycles = quantity // 25 if not quantity % 25 else quantity // 25 + 1
 
-                if index % 5 == 0:
-                    quiz_part_list.append(question_data)
-                    if ques_count % 25 == 0:
-                        create_quiz_part(quiz, ques_count, quiz_part_list)
-                        quiz_part_list = list()
-
-        if 0 < len(quiz_part_list) < 25:
-            create_quiz_part(quiz, ques_count, quiz_part_list)
-
-        quiz.quantity = ques_count
-        quiz.save(update_fields=['quantity'])
-
-        message_to_user = texts['test_created'][user.language]
-        await message.answer(message_to_user, reply_markup=types.ReplyKeyboardRemove())
-    else:
-        pass
-
+    for i in range(cycles):
+        if i + 1 != cycles:
+            to = (i + 1) * 25
+        else:
+            to = quantity
+        questions = question_list[i * 25: to]
+        create_quiz_part(quiz.id, questions, (i * 25 + 1), to)
+    quiz.quantity = quantity
+    quiz.save(update_fields=['quantity'])
+    message_to_user = texts['test_created'][user.language]
+    await message.answer(message_to_user, reply_markup=types.ReplyKeyboardRemove())
     await state.clear()
 
 
 @dp_user.message(NewQuizState.title)
 async def new_quiz_title(message: types.Message, state: FSMContext, texts: dict):
-
     user = await get_user(message.chat)
     if message.content_type == ContentType.TEXT:
 
@@ -107,8 +86,6 @@ async def new_quiz_title(message: types.Message, state: FSMContext, texts: dict)
             await message.answer('...', reply_markup=await reply.remove_markup())
             await message.answer(message_to_user, reply_markup=await inline.main_menu_markup(buttons))
             return await state.clear()
-
-
 
         if Quiz.objects.filter(title=message.text, user=user).exists():
             await message.answer(
@@ -140,22 +117,26 @@ async def new_quiz_file(message: types.Message, bot: Bot, state: FSMContext, tex
 
         if _format in ('xls', 'xlsx', 'docx', 'csv', 'txt'):
             try:
-                questions = []
+                questions = None
                 if _format in ('xls', 'xlsx'):
-                    questions = await reader.get_excel_content(
+                    questions = await engine.get_excel_content(
                         f"{settings.BASE_DIR}/media/{new_file}",
                         _format=_format
                     )
                 elif _format == 'docx':
-                    questions = await reader.get_docx_content(
+                    questions = await engine.get_docx_content(
                         f"{settings.BASE_DIR}/media/{new_file}"
                     )
                 elif _format == "csv":
-                    questions = await reader.get_csv_content(
+                    questions = await engine.get_csv_content(
                         f"{settings.BASE_DIR}/media/{new_file}"
                     )
                 elif _format == "txt":
-                    questions = await reader.get_txt_content(
+                    questions = await engine.get_txt_content(
+                        f"{settings.BASE_DIR}/media/{new_file}"
+                    )
+                elif _format == "pdf":
+                    questions = await engine.get_pdf_content(
                         f"{settings.BASE_DIR}/media/{new_file}"
                     )
 
@@ -166,7 +147,7 @@ async def new_quiz_file(message: types.Message, bot: Bot, state: FSMContext, tex
                     os.remove(f"{settings.BASE_DIR}/media/{new_file}")
                     message_to_user = texts['test_duration'][user.language]
 
-                    await state.update_data(test_questions=questions)
+                    await state.update_data(questions=questions)
                     await message.answer(message_to_user, reply_markup=await reply.duration_markup(
                         texts, user.language
                     ))
@@ -192,7 +173,6 @@ async def new_quiz_file(message: types.Message, bot: Bot, state: FSMContext, tex
 
 @dp_user.message(NewQuizState.quantity)
 async def new_quiz_quantity(message: types.Message, state: FSMContext, texts: dict):
-
     user = await get_user(message.chat)
 
     if message.content_type == ContentType.TEXT:
@@ -237,7 +217,7 @@ async def new_quiz_duration(message: types.Message, state: FSMContext, texts: di
     elif message.text.split(" ")[0].isdigit():
         duration = int(message.text.split(" ")[0])
 
-        if duration in [i for i in range(10, 61, 5)]:
+        if duration in (25, 30, 35, 40, 45, 60, 90, 120, 150):
             await state.update_data(test_duration=duration)
             await save_data(message, state, texts)
         else:
@@ -272,5 +252,3 @@ async def back_to_title(call: types.CallbackQuery, state: FSMContext, texts: dic
     await call.message.answer(message_to_user)
     await state.set_state(NewQuizState.title)
     await call.answer()
-
-

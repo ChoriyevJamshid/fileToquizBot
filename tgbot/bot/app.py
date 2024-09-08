@@ -14,6 +14,7 @@ from tgbot.bot import middlewares
 
 
 def setup_handlers(dp: Dispatcher) -> None:
+    dp.include_router(handlers.prepare_router())
     dp.include_router(handlers.dp_user)
     dp.include_router(handlers.dp_group)
 

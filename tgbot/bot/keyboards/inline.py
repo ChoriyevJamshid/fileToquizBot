@@ -1,6 +1,11 @@
-from aiogram.types import SwitchInlineQueryChosenChat, InlineKeyboardMarkup
-from aiogram.utils.keyboard import InlineKeyboardBuilder, InlineKeyboardButton, KeyboardBuilder
+from typing import Union
 
+from aiogram.fsm.context import FSMContext
+from aiogram.types import InlineKeyboardMarkup
+from aiogram.utils.keyboard import InlineKeyboardBuilder, InlineKeyboardButton, KeyboardBuilder
+from django.db.models import QuerySet
+
+from tgbot.bot.handlers.utils import username_filtering
 from tgbot.bot.utils import get_texts
 
 
@@ -49,46 +54,6 @@ async def main_menu_markup(buttons: dict):
     markup.adjust(*(2,))
     markup2.adjust(*(1,))
     return markup.attach(markup2).as_markup()
-
-
-# async def user_tests_markup(buttons, state):
-#     data = await state.get_data()
-#     current_page = data.get("current_page", 1)
-#     number_of_tests = len(buttons)
-#     in_page = 4
-#     total_page = number_of_tests // in_page + 1 if number_of_tests % in_page else number_of_tests // in_page
-#     markup = InlineKeyboardBuilder()
-#     to = in_page * current_page if in_page * current_page < number_of_tests else number_of_tests
-#     for button in buttons[(current_page - 1) * in_page: to]:
-#         markup.add(
-#             InlineKeyboardButton(
-#                 text=f"{button.title}", callback_data=f"test_{button.id}"
-#             )
-#         )
-#     markup = markup.adjust(*(1,))
-#     if number_of_tests > in_page:
-#         pagination_builder = InlineKeyboardBuilder()
-#         if current_page > 1:
-#             pagination_builder.add(
-#                 InlineKeyboardButton(
-#                     text="⬅️", callback_data=f"pagination_{current_page - 1}"
-#                 )
-#             )
-#         pagination_builder.add(
-#             InlineKeyboardButton(
-#                 text=f"{current_page}", callback_data=f"pagination_{current_page}"
-#             )
-#         )
-#         if current_page < total_page:
-#             pagination_builder.add(
-#                 InlineKeyboardButton(text="➡️", callback_data=f"pagination_{current_page + 1}")
-#             )
-#         markup.attach(pagination_builder.adjust(*(3,)))
-#     markup.attach(InlineKeyboardBuilder().add(
-#         InlineKeyboardButton(text="🔙", callback_data="pagination_back")
-#     ))
-#     await state.update_data({"current_page": current_page})
-#     return markup.as_markup()
 
 
 async def pagination_markup(texts: dict, language: str, total_page, current_page):
@@ -198,3 +163,50 @@ async def generate_markup(buttons: dict, sizes=(1,)) -> InlineKeyboardMarkup:
             )
         )
     return keyboard.adjust(*sizes).as_markup()
+
+
+async def admin_pagination_markup(
+        state: FSMContext, users: Union[list, QuerySet], total_page: int, current_page: int = 1
+):
+    keyboard = InlineKeyboardBuilder()
+    users_keyboard = InlineKeyboardBuilder()
+    extra = InlineKeyboardBuilder()
+
+    data = await state.get_data()
+    chosen_users = data.get("chosen_users", {})
+
+    for user in users:
+        username = "@" + user['username'] if user['username'] else user['first_name']
+        username = username_filtering(username)
+        chat_id = user['chat_id']
+        _id = user['id']
+
+        text = f"{username} ☑️" if not chosen_users.get(str(chat_id), None) else f"{username} ✅"
+        users_keyboard.add(InlineKeyboardButton(text=text, callback_data=f"choose-user_{_id}_{chat_id}"))
+
+
+    # pagination part
+    if current_page > 1:
+        keyboard.add(
+            InlineKeyboardButton(
+                text="⬅️", callback_data=f"{current_page - 1}"
+            )
+        )
+    keyboard.add(
+        InlineKeyboardButton(
+            text=f"{current_page}", callback_data=f"{current_page}"
+        )
+    )
+    if current_page < total_page:
+        keyboard.add(
+            InlineKeyboardButton(text="➡️", callback_data=f"{current_page + 1}")
+        )
+
+    keyboard = users_keyboard.adjust(*(1,)).attach(keyboard.adjust(*(3,)))
+    if chosen_users:
+        extra.add(InlineKeyboardButton(text=f"📂 Saqlash", callback_data="save-users"))
+    else:
+        extra.add(InlineKeyboardButton(text=f"✅ Barcha", callback_data="save-users_all"))
+    keyboard.attach(extra)
+
+    return keyboard.as_markup()

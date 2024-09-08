@@ -1,8 +1,6 @@
 import os
-import hashlib
 from pathlib import Path
 from environs import Env
-from django.utils.translation import gettext_lazy as _
 
 env = Env()
 if not os.path.exists(".env"):
@@ -37,6 +35,10 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     # download
     'import_export',
+    'ckeditor',
+    'ckeditor_uploader',
+    'django_celery_beat',
+    # 'django_ckeditor_5',
     # local
     "common",
     "tgbot"
@@ -51,6 +53,10 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+if not DEBUG:
+    INSTALLED_APPS.insert(6, 'whitenoise.runserver_nostatic')
+    MIDDLEWARE.insert(1,  "whitenoise.middleware.WhiteNoiseMiddleware",)
 
 ROOT_URLCONF = 'config.urls'
 
@@ -85,7 +91,7 @@ DB_ALL = {
         'NAME': BASE_DIR / 'db.sqlite3',
     },
     DB_POSTGRESQL: {
-        'ENGINE': env.str("DB_ENGINE"),
+        'ENGINE': 'django.db.backends.postgresql',
         'NAME': env.str("DB_NAME"),
         'USER': env.str("DB_USER"),
         'PASSWORD': env.str("DB_PASSWORD"),
@@ -131,7 +137,14 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
 STATIC_URL = 'static/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'static')
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+if not DEBUG:
+    STORAGES = {
+        "staticfiles": {
+            "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        },
+    }
 
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
@@ -148,6 +161,18 @@ REDIS_PORT = env.int("REDIS_PORT", 6379)
 REDIS_DB = env.int("REDIS_DB", 0)
 REDIS_URL = f'{REDIS_HOST}://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}'
 
+CELERY_BROKER_URL = env.str("CELERY_BROKER_URL", "redis://localhost:6379")
+CELERY_RESULT_BACKEND = env.str("CELERY_BROKER_URL", "redis://localhost:6379")
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
 PAGINATE_BY = 3
 
+CKEDITOR_UPLOAD_PATH = "uploads/"
+
+CKEDITOR_CONFIGS = {
+    'default': {
+        'toolbar': 'full',
+        'height': 300,
+        'width': 500,
+    },
+}

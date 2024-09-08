@@ -11,6 +11,12 @@ class TextResource(resources.ModelResource):
         widget=ForeignKeyWidget(models.Language, 'title'),
     )
 
+    cod = fields.Field(
+        attribute='cod',
+        column_name='cod',
+        widget=ForeignKeyWidget(models.Code, 'title'),
+    )
+
     created_at = fields.Field(attribute='created_at', column_name='created_at',
                               widget=DateTimeWidget("%m/%d/%Y, %I:%M:%S %p"))
     updated_at = fields.Field(
@@ -22,7 +28,7 @@ class TextResource(resources.ModelResource):
         fields = (
             'id',
             'title',
-            'code',
+            'cod',
             'order',
             'type',
             'language',

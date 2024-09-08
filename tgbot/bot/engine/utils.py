@@ -2,19 +2,18 @@ import csv
 import pandas as pd
 import PyPDF2
 
+import PyPDF2
 
-async def get_csv_content(file_path):
-    result = []
-    try:
-        with open(file_path, mode="r") as csv_file:
-            data = data = [row for row in csv.reader(csv_file, delimiter=",")]
+# Open the PDF file
+with open('C:/Users/user/OneDrive/Desktop/========.pdf', 'rb') as file:
+    reader = PyPDF2.PdfReader(file)
 
-        for row in data:
-            if len(row) == 1 and row[0] != '':
-                result.append(row[0])
-    except Exception:
-        pass
+    # Iterate through each page
+    for page_num in range(len(reader.pages)):
+        page = reader.pages[page_num]
+        text = page.extract_text()
 
-    return result
-
-
+        # Split the text into lines and print each line
+        for line in text.splitlines():
+            line = line.strip()
+            print(repr(line))
