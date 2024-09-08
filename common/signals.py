@@ -13,7 +13,7 @@ def post_save_notification(sender, instance: Notification, created: bool, **kwar
         instance.save()
 
     if created and instance.is_active and not instance.is_sent:
-        send_notification(instance.pk)
+        send_notification.delay(instance.pk)
 
 
 
