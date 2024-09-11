@@ -26,7 +26,10 @@ from common.models import Text
 
 class TextMiddleware(BaseMiddleware):
     def __init__(self) -> None:
-        self.texts = Text.texts_data()
+        try:
+            self.texts = Text.texts_data()
+        except Exception as e:
+            self.user = None
 
     async def __call__(
             self,
