@@ -14,8 +14,13 @@ class InstructionState(StatesGroup):
     text = State()
     video = State()
 
+
 class CreateUserNotState(StatesGroup):
     content = State()
     media = State()
     users = State()
     save = State()
+
+class AdminState(StatesGroup):
+    coupons = State()
+

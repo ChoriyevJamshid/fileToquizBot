@@ -1,11 +1,12 @@
 from django.conf import settings
 from aiogram.fsm.context import FSMContext
-from aiogram import Bot, types, Router, F
+from aiogram import types, Router, F
 from aiogram.filters import CommandStart
 
 from tgbot.bot.keyboards import inline, reply
 from tgbot.bot.states.main import NewQuizState
 from tgbot.bot.utils import check_subscription, get_channels, get_user, get_texts, get_languages
+from tgbot.bot import utils
 from tgbot.models import Quiz, QuizPart, TelegramProfile
 
 from tgbot.bot.filters import filter
@@ -39,17 +40,30 @@ async def send_quiz(message: types.Message, user: TelegramProfile, texts: dict, 
         )
 
 
+async def get_invite_user(inviter_chat_id: int, user: TelegramProfile):
+    inviter_user = await utils.get_user_by_unique_field(**{"chat_id": inviter_chat_id})
+    if user != inviter_user:
+        inviter_user.quiz_number += 1
+        inviter_user.save(update_fields=['quiz_number'])
+
+
 @dp_user.message(CommandStart())
 async def start(message: types.Message, state: FSMContext, texts: dict):
     await state.clear()
-    user = await get_user(message.chat)
+    user = await get_user(message.chat, message.text)
     lang = user.language
     text_data = message.text.split(" ")
+    link = None
+    if len(text_data) > 1:
+        if text_data[-1].isdigit():
+            pass
+        else:
+            link = text_data[-1]
 
     if lang is None:
         message_to_user = "🌐 Til tanlash uchun quidagil tugmalardan foydalaning. 👇"
         languages = await get_languages(state)
-        link = text_data[-1] if len(text_data) == 2 else ""
+        link = link if link else ""
         return await message.answer(message_to_user, reply_markup=await inline.languages_markup(languages, link))
 
     channels = get_channels()
@@ -65,19 +79,23 @@ async def start(message: types.Message, state: FSMContext, texts: dict):
                 text=f"✅ {texts['check_subscribe'][user.language]}",
             ))
 
-    if len(text_data) > 1:
+    if link:
         return await send_quiz(message, user, texts)
 
     message_to_user = f"🤖 {texts['menu'][user.language]} ⬇️"
     buttons = texts['main_menu_buttons'][user.language]
-    await message.answer(message_to_user, reply_markup=await inline.main_menu_markup(buttons))
+    await message.answer(message_to_user, reply_markup=await inline.main_menu_markup(
+        buttons, texts, lang))
 
 
 @dp_user.callback_query(F.data.startswith("lang"))
 async def change_language(call: types.CallbackQuery, state: FSMContext, texts: dict):
-
+    print('change_language\n')
     _, code, link = call.data.split("_")
-
+    print(repr(call.data))
+    print(_)
+    print(code)
+    print(link)
     user = await get_user(call.from_user)
     user.language = code
     user.save(update_fields=["language"])
@@ -86,6 +104,7 @@ async def change_language(call: types.CallbackQuery, state: FSMContext, texts: d
     status = await check_subscription(call.bot, user.chat_id, channels)
 
     if not status:
+        print('Not status')
         message_to_user = f"🔔 {texts['subscribe'][user.language]}"
         await call.message.answer(message_to_user,
                                   reply_markup=await inline.channels_markup(
@@ -94,11 +113,15 @@ async def change_language(call: types.CallbackQuery, state: FSMContext, texts: d
                                   ))
         await state.update_data({"channels": channels})
     else:
+        print('Yes status')
         if not link:
+            print('No link')
             message_to_user = f"🤖 {texts['menu'][user.language]} ⬇️"
             buttons = texts['main_menu_buttons'][user.language]
-            await call.message.edit_text(message_to_user, reply_markup=await inline.main_menu_markup(buttons))
+            await call.message.edit_text(message_to_user, reply_markup=await inline.main_menu_markup(
+                buttons, texts, user.language))
         else:
+            print('Yes link')
             await send_quiz(call.message, user, texts, link)
     await call.answer()
 
@@ -107,6 +130,7 @@ async def change_language(call: types.CallbackQuery, state: FSMContext, texts: d
 async def process_check_subscribe(call: types.CallbackQuery, state: FSMContext, texts: dict):
     data = await state.get_data()
     user = await get_user(state)
+    language = user.language if user.language else 'uz'
     texts = await get_texts(state)
     if call.data.split("_")[1] == "subscription":
         channels = data.get("channels")
@@ -116,7 +140,8 @@ async def process_check_subscribe(call: types.CallbackQuery, state: FSMContext, 
         if status:
             message_to_user = f"🤖 {texts['menu'][user.language]} ⬇️"
             buttons = texts['main_menu_buttons'][user.language]
-            await call.message.answer(message_to_user, reply_markup=await inline.main_menu_markup(buttons))
+            await call.message.answer(message_to_user, reply_markup=await inline.main_menu_markup(
+                buttons, texts, language))
         else:
             text = texts['not_subscribe'][user.language]
             await call.answer(text, show_alert=True)
@@ -140,16 +165,25 @@ async def process_menu(call: types.CallbackQuery, state: FSMContext, texts: dict
         )
 
     if call.data.split("_")[-1] == "2":
-        if user.is_verified:
-            message_to_user = texts['test_title'][user.language]
-            await call.message.delete_reply_markup()
-            await call.message.answer(message_to_user, reply_markup=await reply.generate_markup(
-                {}, (1,), texts, language
-            ))
-            return await state.set_state(NewQuizState.title)
+        if not user.is_verified:
+            message_to_user = texts['no_verified'][user.language]
+            return await call.answer(message_to_user)
 
-        message_to_user = texts['no_verified'][user.language]
-        await call.answer(message_to_user)
+        if user.quiz_number <= 0:
+            message_to_user = texts['no_limits'][user.language]
+            return await call.message.answer(
+                message_to_user,
+                reply_markup=await inline.share_friends_markup(
+                    texts['share_friends'][language]
+                )
+            )
+
+        message_to_user = texts['test_title'][user.language]
+        await call.message.delete_reply_markup()
+        await call.message.answer(message_to_user, reply_markup=await reply.generate_markup(
+            {}, (1,), texts, language
+        ))
+        return await state.set_state(NewQuizState.title)
 
     if call.data.split("_")[-1] == "3":
         quizzes = Quiz.objects.filter(user_id=user.id)
@@ -204,7 +238,8 @@ async def process_pagination(call: types.CallbackQuery, state: FSMContext, texts
     if page_number == "menu":
         message_to_user = f"🤖 {texts['menu'][user.language]} ⬇️"
         buttons = texts['main_menu_buttons'][user.language]
-        return await call.message.edit_text(message_to_user, reply_markup=await inline.main_menu_markup(buttons))
+        return await call.message.edit_text(message_to_user, reply_markup=await inline.main_menu_markup(
+            buttons, texts, language))
 
     page_number = int(page_number)
 

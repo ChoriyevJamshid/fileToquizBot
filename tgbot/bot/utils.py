@@ -11,7 +11,7 @@ from common.models import RequiredChannel, Text, Language, Notification
 from tgbot.models import TelegramProfile
 
 
-def get_or_create_user(chat: Union[Chat, User]):
+def get_or_create_user(chat: Union[Chat, User], msg_text: Optional[str] = None):
     user = TelegramProfile.objects.filter(chat_id=chat.id).first()
 
     if user is None:
@@ -22,11 +22,17 @@ def get_or_create_user(chat: Union[Chat, User]):
             username=chat.username,
         )
         user.save()
+        if msg_text and (msg_text.split(' ')[-1]).isdigit():
+            inviter_chat_id = int(msg_text.split(' ')[-1])
+            inviter = TelegramProfile.objects.filter(chat_id=inviter_chat_id).first()
+            if inviter:
+                inviter.quiz_number += 1
+                inviter.save(update_fields=['quiz_number'])
     return user
 
 
-async def get_user(chat: Union[Chat, User]):
-    user = get_or_create_user(chat)
+async def get_user(chat: Union[Chat, User], msg_text: Optional[str] = None):
+    user = get_or_create_user(chat, msg_text)
     return user
 
 
@@ -41,6 +47,10 @@ async def get_user_by_unique_field(**parameters):
 
 async def get_users():
     return TelegramProfile.objects.all().values('id', 'chat_id', 'username', 'first_name').order_by('-created_at')
+
+
+async def update_users_coupon(number: int):
+    TelegramProfile.objects.all().update(quiz_number=number)
 
 
 async def check_subscription(bot: Bot, user_id, channels):
@@ -75,7 +85,6 @@ async def get_languages(state):
 
 
 async def save_user_notification(data: dict):
-
     chosen_users = list(data.get("chosen_users").values())
     if chosen_users[0] == "all":
         ids = "all"
@@ -120,4 +129,3 @@ def seconds_to_time(secs: int):
     seconds = secs % 60
 
     return datetime.strptime(f"{hours}:{minutes}:{seconds}", "%H:%M:%S").time()
-

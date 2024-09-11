@@ -7,7 +7,7 @@ from tgbot.bot.utils import get_user
 from tgbot.models import Data
 
 
-@dp_user.message(Command("admin"))
+@dp_user.message(Command("instruction_photo_video"))
 async def admin(message: types.Message, state: FSMContext):
     user = await get_user(message.chat)
 

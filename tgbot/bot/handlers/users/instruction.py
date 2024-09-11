@@ -11,8 +11,10 @@ from tgbot.models import Data
 async def instruction_callback(call: types.CallbackQuery, texts: dict):
     user = await get_user(call.from_user)
 
-    buttons = texts['instruction_buttons'][user.language]
-    back_btn = texts['back'][user.language]
+    language = user.language if user.language else 'uz'
+
+    buttons = texts['instruction_buttons'][language]
+    back_btn = texts['back'][language]
     call_data = call.data.split("_")[-1]
 
     if not user.is_verified:
@@ -49,9 +51,10 @@ async def instruction_callback(call: types.CallbackQuery, texts: dict):
         await call.message.edit_reply_markup(reply_markup=markup)
 
     else:
-        message_to_user = f"🤖 {texts['menu'][user.language]} ⬇️"
-        buttons = texts['main_menu_buttons'][user.language]
-        await call.message.edit_text(message_to_user, reply_markup=await inline.main_menu_markup(buttons))
+        message_to_user = f"🤖 {texts['menu'][language]} ⬇️"
+        buttons = texts['main_menu_buttons'][language]
+        await call.message.edit_text(message_to_user, reply_markup=await inline.main_menu_markup(
+            buttons, texts, language))
 
     await call.answer()
 

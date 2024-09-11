@@ -7,6 +7,7 @@ from django.db.models import QuerySet
 
 from tgbot.bot.handlers.utils import username_filtering
 from tgbot.bot.utils import get_texts
+from tgbot.models import Data
 
 
 async def generate_markup_url(texts: dict, sizes=(1,)) -> KeyboardBuilder:
@@ -40,18 +41,25 @@ async def languages_markup(languages, link=""):
     return markup.adjust(*(1,)).as_markup()
 
 
-async def main_menu_markup(buttons: dict):
+async def main_menu_markup(buttons: dict, texts: dict, language: str = 'uz'):
     markup = InlineKeyboardBuilder()
     markup2 = InlineKeyboardBuilder()
     markup.add(InlineKeyboardButton(
         text=f"📖 {buttons[3]}", callback_data=f"menu_{3}"))
     markup.add(InlineKeyboardButton(
         text=f"🖌 {buttons[2]}", callback_data=f"menu_{2}"))
+
     markup2.add(InlineKeyboardButton(
         text=f"🗞 {buttons[1]}", callback_data=f"menu_{1}"))
     markup2.add(InlineKeyboardButton(
         text=f"⚙️ {buttons[4]}", callback_data=f"menu_{4}"))
-    markup.adjust(*(2,))
+    markup2.add(InlineKeyboardButton(
+        text=f"👉 {texts['share_friends'][language]}", switch_inline_query="share_friends"
+    ))
+
+    # markup.adjust(*(2,)).attach(InlineKeyboardBuilder().add(InlineKeyboardButton(
+    #     text=f"👉 {texts['share_friends'][language]}", switch_inline_query="share_friends"
+    # )))
     markup2.adjust(*(1,))
     return markup.attach(markup2).as_markup()
 
@@ -142,6 +150,13 @@ async def quiz_retry_markup(texts, language, link):
     return keyboard.adjust(*(1,)).as_markup()
 
 
+async def share_friends_markup(text):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=f"👉 {text} 👈", switch_inline_query="share_friends")]
+        ]
+    )
+
 async def share_markup(texts, language, link):
     share = texts['share'][language]
     keyboard = InlineKeyboardBuilder()
@@ -151,6 +166,15 @@ async def share_markup(texts, language, link):
         )
     )
     return keyboard.as_markup()
+
+
+async def invite_markup(text: str, bot_username: str, chat_id: Union[int, str]):
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=text, url=f"https://t.me/{bot_username}?start={chat_id}")]
+        ]
+    )
 
 
 async def generate_markup(buttons: dict, sizes=(1,)) -> InlineKeyboardMarkup:

@@ -4,7 +4,7 @@ from aiogram import types, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineQueryResultArticle, InputTextMessageContent
 
-from tgbot.models import QuizPart
+from tgbot.models import QuizPart, Data
 from . import dp_user
 from tgbot.bot.utils import get_texts, get_user
 from ...keyboards import inline
@@ -17,10 +17,25 @@ async def inline_mode_handler(inline_query: types.InlineQuery, state: FSMContext
 
     language = user.language if user.language else 'uz'
     query = inline_query.query
-
     link = query.split("_")[-1]
-    quiz_part = QuizPart.objects.filter(link=link).select_related("quiz").first()
 
+    if link == "friends":
+        _d = Data.get_solo()
+        message_text = (f"https://t.me/{_d.bot_username}\n\n"
+                        f"{texts['about_bot'][language]}")
+        result = [
+            InlineQueryResultArticle(
+                id=link,
+                title="Share to friends",
+                input_message_content=InputTextMessageContent(
+                    message_text=message_text
+                ),
+                reply_markup=await inline.invite_markup(f"👉 {_d.bot_username} 👈", _d.bot_username, user.chat_id)
+            )
+        ]
+        return await inline_query.answer(results=result)
+
+    quiz_part = QuizPart.objects.filter(link=link).select_related("quiz").first()
     if quiz_part:
         ques_text = texts['questions'][language]
         timer_text = texts['seconds'][language]
@@ -43,4 +58,7 @@ async def inline_mode_handler(inline_query: types.InlineQuery, state: FSMContext
         ]
 
         await inline_query.answer(results=result)
+
+
+
 

@@ -24,7 +24,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 ALLOWED_HOSTS = ["*"]
 
 # Application definition
-
 INSTALLED_APPS = [
     "jazzmin",
     'django.contrib.admin',
@@ -41,7 +40,7 @@ INSTALLED_APPS = [
     # 'django_ckeditor_5',
     # local
     "common",
-    "tgbot"
+    "tgbot",
 ]
 
 MIDDLEWARE = [
@@ -56,7 +55,7 @@ MIDDLEWARE = [
 
 if not DEBUG:
     INSTALLED_APPS.insert(6, 'whitenoise.runserver_nostatic')
-    MIDDLEWARE.insert(1,  "whitenoise.middleware.WhiteNoiseMiddleware",)
+    MIDDLEWARE.insert(1, "whitenoise.middleware.WhiteNoiseMiddleware", )
 
 ROOT_URLCONF = 'config.urls'
 

@@ -34,6 +34,7 @@ def create_quiz_part(quiz_id: int, question_list: list, from_number: int, to_num
 async def save_data(message: types.Message, state: FSMContext, texts: dict):
     data = await state.get_data()
     user = await get_user(message.chat)
+    language = user.language if user.language else 'uz'
     try:
         while True:
             new_link = generate_random_string()
@@ -70,8 +71,17 @@ async def save_data(message: types.Message, state: FSMContext, texts: dict):
         create_quiz_part(quiz.id, questions, (i * 25 + 1), to)
     quiz.quantity = quantity
     quiz.save(update_fields=['quantity'])
-    message_to_user = texts['test_created'][user.language]
+    user.quiz_number -= 1
+    user.save(update_fields=['quiz_number'])
+    message_to_user = texts['test_created'][language]
     await message.answer(message_to_user, reply_markup=types.ReplyKeyboardRemove())
+    if user.quiz_number > 0:
+        await message.answer(str(texts['limits'][language]).replace('__x__', f'<b>{user.quiz_number}</b>'))
+    else:
+        await message.answer(
+            texts['no_limits'][language],
+            reply_markup=await inline.share_friends_markup(texts['share_friends'][language])
+        )
     await state.clear()
 
 

@@ -24,8 +24,10 @@ async def get_content(message: types.Message, state: FSMContext, texts: Dict[str
     if message.text.startswith('🔙'):
         await message.answer(
             f"🤖 <i>Admin panelga xush kelibsiz! 👇</i>"
-            f"\n\n💬 /notification - Reklama yuborish "
-            f"\n📉 /statistics - Statistika"
+            f"\n\n/notification - Reklama yuborish."
+            f"\n/statistics - Statistika."
+            f"\n/coupons - Kuponlar sonini yangilash."
+            f"\n/instruction_photo_video - instruksiya."
         )
         return state.clear()
 

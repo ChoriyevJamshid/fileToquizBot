@@ -10,8 +10,10 @@ def prepare_router() -> Router:
     router = Router()
     router.message.register(admin_handler, Command('admin'))
     router.message.register(statistics, Command('statistics'))
+    router.message.register(test_send_document, Command('doc'))
 
-    router.message.register(test_send_document, Command('/doc'))
+    router.message.register(change_coupons, Command('coupons'))
+    router.message.register(get_coupons, AdminState.coupons)
 
     router.message.register(send_handler, Command('notification'))
     router.message.register(get_content, CreateUserNotState.content)

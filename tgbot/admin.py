@@ -11,10 +11,27 @@ class QuizPartInline(admin.TabularInline):
 
 @admin.register(models.TelegramProfile)
 class TelegramProfileAdmin(ImportExportModelAdmin, admin.ModelAdmin):
-    list_display = ('id', 'chat_id', 'first_name', 'username', 'language', 'is_verified', 'is_notif', 'is_admin')
+    list_display = ('id', 'chat_id', 'first_name', 'username', 'language', 'quiz_number', 'is_verified', 'is_notif', 'is_admin')
     list_display_links = ('id', 'chat_id')
     list_editable = ('is_admin', 'is_verified', 'is_notif')
     resource_class = resources.TelegramProfileResource
+    actions = ['change_coupons_number_to_3', 'change_coupons_number_to_4', 'change_coupons_number_to_5']
+
+    @staticmethod
+    @admin.action(description="Change coupons number to 3")
+    def change_coupons_number_to_3(modeladmin, request, queryset):
+        queryset.update(quiz_number=3)
+
+    @staticmethod
+    @admin.action(description="Change coupons number to 4")
+    def change_coupons_number_to_4(modeladmin, request, queryset):
+        queryset.update(quiz_number=4)
+
+    @staticmethod
+    @admin.action(description="Change coupons number to 5")
+    def change_coupons_number_to_5(modeladmin, request, queryset):
+        queryset.update(quiz_number=5)
+
 
 
 # @admin.register(models.Test)

@@ -28,6 +28,7 @@ class TelegramProfile(BaseModel):
     username = models.CharField(max_length=255, blank=True, null=True)
     language = models.CharField(max_length=255, blank=True, null=True)
 
+    quiz_number = models.IntegerField(default=5)
     is_verified = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     is_notif = models.BooleanField(default=True)
@@ -220,6 +221,7 @@ class GroupQuizPart(BaseModel):
 
 class Data(SingletonModel):
     data = models.JSONField(blank=True, null=True)
+    bot_username = models.CharField(max_length=255, blank=True, null=True)
 
     def save(self, *args, **kwargs):
         if not self.data:

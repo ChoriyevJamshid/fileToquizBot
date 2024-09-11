@@ -4,6 +4,7 @@ from aiogram import types
 from aiogram.fsm.context import FSMContext
 
 from tgbot.bot import utils, queries
+from tgbot.bot.states import AdminState
 
 
 async def admin_handler(message: types.Message, state: FSMContext, texts: Dict[str, Dict[str, str]]):
@@ -14,8 +15,10 @@ async def admin_handler(message: types.Message, state: FSMContext, texts: Dict[s
 
     await message.answer(
         f"🤖 <i>Admin panelga xush kelibsiz! 👇</i>"
-        f"\n\n💬 /notification - Reklama yuborish "
-        f"\n📉 /statistics - Statistika"
+        f"\n\n/notification - Reklama yuborish."
+        f"\n/statistics - Statistika."
+        f"\n/coupons - Kuponlar sonini yangilash."
+        f"\n/instruction_photo_video - instruksiya."
     )
 
 
@@ -36,23 +39,30 @@ async def statistics(message: types.Message, state: FSMContext, texts: Dict[str,
     await message.answer(msg_text_user)
 
 
-async def test_send_document(message: types.Message):
+async def test_send_document(message: types.Message, state: FSMContext):
 
     await message.answer_video(video="BQACAgIAAxkBAAIWeGbdXITs9Xp4Oe_swn8lmUjN0GmPAAKCVAACOKXpSgS2Fgn6gSuwNgQ")
     # await message.answer_document()
 
 
+async def change_coupons(message: types.Message, state: FSMContext):
+    user = await utils.get_user(message.chat)
+
+    if not user.is_admin: return
+
+    await message.answer(
+        "💬 Kuponlar sonini kiriting."
+    )
+    await state.set_state(AdminState.coupons)
 
 
+async def get_coupons(message: types.Message, state: FSMContext):
 
-
-
-
-
-
-
-
-
-
-
+    if message.text.isdigit():
+        number = int(message.text)
+        await utils.update_users_coupon(number)
+        await message.answer("✅ Kuponlar soni yangilandi.")
+        await state.clear()
+    else:
+        await message.answer("✅ Son kiriting!")
 

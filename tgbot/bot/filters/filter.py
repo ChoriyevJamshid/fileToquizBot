@@ -17,7 +17,10 @@ class ChatTypeFilter(Filter):
 
 class UserActiveQuizFilter(Filter):
     def __init__(self) -> None:
-        self.texts = Text.texts_data()
+        try:
+            self.texts = Text.texts_data()
+        except Exception as e:
+            self.texts = None
 
     async def __call__(self, obj: types.Message | types.CallbackQuery) -> bool:
         if isinstance(obj, types.Message):
