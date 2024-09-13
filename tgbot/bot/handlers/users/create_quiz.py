@@ -4,6 +4,7 @@ from aiogram import Bot, types, F
 from aiogram.enums import ContentType
 from aiogram.fsm.context import FSMContext
 from django.conf import settings
+from django.templatetags.i18n import language
 
 from tgbot.bot.keyboards import reply, inline
 from tgbot.bot.states.main import NewQuizState
@@ -88,13 +89,14 @@ async def save_data(message: types.Message, state: FSMContext, texts: dict):
 @dp_user.message(NewQuizState.title)
 async def new_quiz_title(message: types.Message, state: FSMContext, texts: dict):
     user = await get_user(message.chat)
+    language = user.language if user.language else 'uz'
     if message.content_type == ContentType.TEXT:
 
         if message.text.startswith("🔙"):
             message_to_user = f"🤖 {texts['menu'][user.language]} ⬇️"
             buttons = texts['main_menu_buttons'][user.language]
             await message.answer('...', reply_markup=await reply.remove_markup())
-            await message.answer(message_to_user, reply_markup=await inline.main_menu_markup(buttons))
+            await message.answer(message_to_user, reply_markup=await inline.main_menu_markup(buttons, texts, language))
             return await state.clear()
 
         if Quiz.objects.filter(title=message.text, user=user).exists():
