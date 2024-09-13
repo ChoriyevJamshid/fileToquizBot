@@ -117,9 +117,10 @@ def resave_content(text: str, entities: Optional[List[types.MessageEntity]]):
     for entity in entities:
         offset = entity.offset
         length = entity.length
-        _type = data_entities[entity.type]
+        _type = data_entities.get(entity.type, None)
         _sub_text = text[offset: offset + length + 1]
-        result = result.replace(_sub_text, f"{_type[0]}{_sub_text}{_type[1]}")
+        if _type:
+            result = result.replace(_sub_text, f"{_type[0]}{_sub_text}{_type[1]}")
     return result
 
 
