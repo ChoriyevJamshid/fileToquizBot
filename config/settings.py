@@ -21,7 +21,7 @@ LANGUAGES = (
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-ALLOWED_HOSTS = ["djsites.uz", 'www.djsites.uz', '127.0.0.1', 'localhost', '*']
+ALLOWED_HOSTS = ['*', "djsites.uz", 'www.djsites.uz', '127.0.0.1', 'localhost']
 
 # Application definition
 INSTALLED_APPS = [
@@ -177,6 +177,6 @@ CKEDITOR_CONFIGS = {
 }
 
 
-CSRF_TRUSTED_ORIGINS = ['https://djsites.com', 'https://www.djsites.com']
-CSRF_COOKIE_SECURE = True
+#CSRF_TRUSTED_ORIGINS = ['*', 'https://djsites.com', 'https://www.djsites.com']
+#CSRF_COOKIE_SECURE = True
 
